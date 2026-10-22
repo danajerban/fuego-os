@@ -1,0 +1,13 @@
+# The script runs on macOS and through adb shell on the TV, so text files keep LF line endings,
+# also in a Windows checkout: a shell script with CRLF endings doesn't run.
+* text=auto eol=lf
+
+# Gradle wrapper script for Windows
+*.bat text eol=crlf
+
+# Binaries
+*.png binary
+*.jpg binary
+*.webp binary
+*.jar binary
+*.apk binary

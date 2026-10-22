@@ -1,0 +1,36 @@
+# Gradle and Android Studio
+.gradle/
+build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.iml
+.idea/
+.kotlin/
+
+# Build outputs and signing (never commit a keystore)
+*.apk
+*.aab
+*.ap_
+*.dex
+*.jks
+*.keystore
+output-metadata.json
+
+# Release bundles made locally
+dist/
+
+# A TV's own data: Snapshots and probe output stay on the Mac that made them
+snapshots/
+*.snapshot
+probe-*.txt
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Local tooling
+.claude/

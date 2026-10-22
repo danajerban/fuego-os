@@ -1,0 +1,27 @@
+name: Idea
+description: Something fuego-os could do.
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What fuego-os could do
+      description: What you'd like, and what it would help with.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which piece
+      options:
+        - The script
+        - The package lists (known-Bloat or must-keep)
+        - The Launcher
+        - Docs
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: Cost on the TV
+      description: Speed comes first. Does this need the network, a background service, root or a firmware change? Those are out of scope (see the spec, issue 1).

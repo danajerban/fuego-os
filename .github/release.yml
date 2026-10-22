@@ -1,0 +1,30 @@
+# Groups the notes GitHub generates for a release (gh release create --generate-notes) by label.
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+      - duplicate
+      - invalid
+      - wontfix
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking
+    - title: Script
+      labels:
+        - area:script
+    - title: Package lists
+      labels:
+        - area:package-lists
+    - title: Launcher
+      labels:
+        - area:launcher
+    - title: Fixes
+      labels:
+        - bug
+    - title: Docs
+      labels:
+        - documentation
+    - title: Other changes
+      labels:
+        - "*"

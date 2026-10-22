@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/danajerban/fuego-os/security/advisories/new
+    about: Please report security problems privately, not in a public issue.
+  - name: Wireless debugging and ADB on Android TV
+    url: https://developer.android.com/tools/adb
+    about: Help with adb itself is in Android's documentation.

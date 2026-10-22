@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in the script or the Launcher doesn't work as it should.
+labels: [bug, needs-triage]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which piece
+      options:
+        - The script (probe, apply, restore)
+        - The Launcher
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran or pressed, what you expected, and what happened instead. A photo of the screen helps.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: fuego-os version or commit
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: TV and Android build
+      description: The model, and the Android build from the TV's About screen in Settings, or from `probe` output.
+    validations:
+      required: true
+  - type: textarea
+    id: probe
+    attributes:
+      label: probe output
+      description: >
+        The full output of `probe`. It changes nothing on the TV. Look through it before posting, and take
+        out anything you'd rather not share (IP addresses, Wi-Fi names, account names).
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output of the command that failed
+      description: For script problems, the output of `apply`, `apply` with the dry-run flag, or `restore`.
+      render: text
+  - type: checkboxes
+    id: restore
+    attributes:
+      label: Undo
+      options:
+        - label: I ran `restore` and it brought the TV back.
