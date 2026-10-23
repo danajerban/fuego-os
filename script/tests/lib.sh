@@ -123,6 +123,7 @@ com.google.android.gsf system
 com.google.android.katniss system
 com.google.android.tungsten.setupwraith system
 com.google.android.tv system
+com.google.android.tv.inputplayer system
 com.google.android.tv.remote.service system
 com.google.android.tvrecommendations system
 com.google.android.youtube.tv system
