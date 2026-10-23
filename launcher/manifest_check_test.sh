@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests the Launcher's merged-manifest check from the outside: a copy of launcher/ with a changed
-# manifest in, the Gradle result out. It shows that adding the INTERNET permission fails the build
-# that CI runs. Needs JDK 17 and the Android SDK (ANDROID_HOME), like any Launcher build.
+# manifest in, the Gradle result out. It shows that adding the INTERNET permission, or a service besides
+# the Idle Screen, fails the build that CI runs. Needs JDK 17 and the Android SDK (ANDROID_HOME), like any Launcher build.
 # Run from anywhere: launcher/manifest_check_test.sh
 # Works on macOS /bin/bash 3.2.
 
@@ -33,6 +33,17 @@ add_permission() {
   grep -qF "android:name=\"$permission\"" "$manifest"
 }
 
+# Declares a service named after its class, right before </application> in the Launcher's own manifest.
+add_service() {
+  dir=$1 service=$2
+  manifest="$dir/app/src/main/AndroidManifest.xml"
+  awk -v s="$service" '
+    /<\/application>/ { printf "        <service android:name=\"%s\" android:exported=\"false\" />\n", s }
+    { print }
+  ' "$manifest" >"$manifest.new" && mv "$manifest.new" "$manifest"
+  grep -qF "android:name=\"$service\"" "$manifest"
+}
+
 # run_check NAME DIR EXPECTED_EXIT [EXPECTED_TEXT]
 run_check() {
   name=$1 dir=$2 want_exit=$3 want_text=${4:-}
@@ -61,6 +72,11 @@ run_check "the Launcher's manifest as it is passes" "$d" 0
 d=$(fresh internet)
 add_permission "$d" android.permission.INTERNET
 run_check "adding the INTERNET permission fails the build" "$d" 1 "has the INTERNET permission"
+
+d=$(fresh service)
+add_service "$d" io.github.danajerban.fuegoos.ArtworkSync
+run_check "a service besides the Idle Screen fails the build" "$d" 1 \
+  "declares the service io.github.danajerban.fuegoos.ArtworkSync"
 
 echo
 echo "$passed passed, $failed failed"
