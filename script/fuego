@@ -763,9 +763,18 @@ snapshot_failed() {
 
 # Debloat: disables the Known-Bloat List, and nothing else. The Must-Keep List wins over it,
 # and the Takeover Packages are left to the Home Takeover.
+# A package the TV's screensaver (screensaver_components, which can list several components)
+# still points at is left on. Debloat runs after the Idle Screen step, so that happens only when
+# the Idle Screen did not take over, and a later apply disables it. A dry run assumes the Idle
+# Screen is set when the Launcher would be ready, as apply_idle_screen's "would set" does.
 apply_debloat() {
-  local pkg
+  local pkg screensaver
   say "Debloat"
+  if [ -n "$DRY_RUN" ] && [ -n "$LAUNCHER_READY" ]; then
+    screensaver=$IDLE_SCREEN
+  else
+    screensaver=$(setting secure screensaver_components)
+  fi
   for pkg in $KNOWN_BLOAT_LIST; do
     if contains "$MUST_KEEP_LIST" "$pkg"; then
       outcome skipped "$pkg (on the Must-Keep List, which always wins)"
@@ -775,7 +784,12 @@ apply_debloat() {
       case "$(package_state "$pkg")" in
         missing) outcome skipped "$pkg (not installed)" ;;
         disabled) outcome "already off" "$pkg" ;;
-        enabled) set_package_state "$pkg" disabled ;;
+        enabled)
+          case ",$screensaver," in
+            *",$pkg/"*) outcome skipped "$pkg (still the TV's screensaver: the Idle Screen did not take over)" ;;
+            *) set_package_state "$pkg" disabled ;;
+          esac
+          ;;
       esac
     fi
   done
@@ -1463,8 +1477,6 @@ cmd_apply() {
   take_snapshot
   # The steps, in order. Each prints its outcomes and keeps going when one fails.
   say
-  apply_debloat
-  say
   apply_speed_settings
   say
   apply_launcher
@@ -1472,6 +1484,8 @@ cmd_apply() {
   apply_home_takeover
   say
   apply_idle_screen
+  say
+  apply_debloat
   say
   if [ -n "$PICTURES" ]; then
     apply_artwork

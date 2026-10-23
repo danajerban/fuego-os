@@ -33,7 +33,7 @@ test_restore_again_changes_nothing() {
   run_fuego restore
   assert_status 0
   assert_no_writes
-  assert_output_contains "unchanged    17 packages already as in the Snapshot"
+  assert_output_contains "unchanged    18 packages already as in the Snapshot"
   assert_output_contains "Summary: 0 changed back, 0 not changed back"
 }
 
