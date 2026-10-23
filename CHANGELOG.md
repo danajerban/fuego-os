@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The package lists, checked against the real Fuego 2K: entries `probe` found on the TV are marked confirmed; the Known-Bloat List gains the ACR ad-tracking app, the store demo, Google Feedback, the maker's e-manual, Google's screensaver (the Idle Screen replaces it), the USB media player and the preinstalled streaming apps the owner does not use; the Must-Keep List gains the TV stack HDMI depends on, the remote and Bluetooth pairing, the keyboard, WebView, the shell adb uses and the factory manager. Play Services is confirmed as the system updater. The evidence is in `docs/research/fuego-2k-packages.md`.
+- `apply` runs Debloat after setting the Idle Screen, and leaves a Known-Bloat package on while the TV's screensaver still points at it (Google's ambient mode when the Idle Screen did not take over), so the screensaver never points at a disabled app; the next `apply` disables it.
+
 ### Fixed
 
 - Commands work when adb lists the TV twice (its address and the name adb's mDNS finds it under), which made every adb call fail with "more than one device" and showed as "Can't reach the TV". `connect` saves the TV's address beside the Snapshot, and each command talks to one device: `ANDROID_SERIAL` if set, else the saved address if listed, else the only device listed; with several listed and none of them saved, it asks to run `fuego connect` again.

@@ -30,6 +30,8 @@ test_probe_tags_each_package_with_its_lists() {
   assert_equals "com.google.android.gms Must-Keep List" "$(package_line com.google.android.gms)"
   assert_equals "com.google.android.katniss Known-Bloat List, disabled" \
     "$(package_line com.google.android.katniss)"
+  assert_equals "com.google.android.apps.tv.dreamx Known-Bloat List" \
+    "$(package_line com.google.android.apps.tv.dreamx)"
   assert_equals "com.google.android.apps.tv.launcherx Takeover Packages" \
     "$(package_line com.google.android.apps.tv.launcherx)"
   assert_equals "com.fuego.tv.otaupdater unlisted" "$(package_line com.fuego.tv.otaupdater)"
@@ -131,10 +133,9 @@ test_probe_flags_packages_on_none_of_the_lists() {
   fake_tv_set_package_state com.fuego.tv.otaupdater disabled-user
   run_fuego probe
   assert_status 0
-  assert_output_contains "Unlisted packages (4): on none of the lists. fuego never disables them;"
+  assert_output_contains "Unlisted packages (3): on none of the lists. fuego never disables them;"
   assert_equals "  android
   com.fuego.tv.otaupdater (disabled)
-  com.fuego.tv.shoppingrows
-  com.google.android.apps.tv.dreamx" \
+  com.fuego.tv.shoppingrows" \
     "$(printf '%s\n' "$OUTPUT" | sed -n '/^Unlisted packages/,/^$/p' | grep '^  ')"
 }

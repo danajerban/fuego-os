@@ -96,6 +96,21 @@ write uninstall io.github.danajerban.fuegoos" \
     "$(fake_tv_writes | grep -e screensaver -e uninstall)" "writes"
 }
 
+# Ambient mode is Known-Bloat, so apply turned it off: restore turns it on before the screensaver
+# points at it again.
+test_restore_enables_ambient_mode_before_making_it_the_screensaver_again() {
+  run_fuego_answering yes apply --launcher "$(launcher_apk)"
+  assert_equals disabled-user "$(fake_tv_package_state com.google.android.apps.tv.dreamx)"
+  : > "$FAKE_TV/calls"
+  run_fuego restore
+  assert_status 0
+  assert_equals enabled "$(fake_tv_package_state com.google.android.apps.tv.dreamx)"
+  assert_equals "$AMBIENT_MODE" "$(fake_tv_setting secure screensaver_components)" screensaver_components
+  assert_equals "write shell pm enable com.google.android.apps.tv.dreamx
+write shell settings put secure screensaver_components $AMBIENT_MODE" \
+    "$(fake_tv_writes | grep -e screensaver_components -e dreamx)" "writes"
+}
+
 ARTWORK=/sdcard/Android/data/io.github.danajerban.fuegoos/files/artwork
 
 # pictures_folder: the owner's folder on the Mac, with two JPEGs, a PNG and other files. Prints
