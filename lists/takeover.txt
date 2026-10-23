@@ -2,6 +2,7 @@
 # Never on the Known-Bloat List or the Must-Keep List (lists/check.sh enforces it).
 # The Home Takeover disables them in this order and re-enables them in reverse: the setup wizard
 # goes off first, so Home never lands on it alone (docs/research/android-tv-launchers.md section 2).
+# The setup wizard must stay the first entry: the script reads it from there for the Casting Fallback.
 # Format: package|confirmed_on_tv|reason  (see lists/README.md)
 # From research (docs/research/), confirm each entry with probe.
 com.google.android.tungsten.setupwraith|false|Setup wizard: a fallback Home that brings the Stock Launcher back

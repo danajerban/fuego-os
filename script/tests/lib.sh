@@ -82,13 +82,23 @@ run_fuego_answering() {
 # with_list_entry FILE LINE: runs the script from a copy of the repo whose lists/FILE also has
 # LINE, for list mistakes lists/check.sh would refuse (a package on two lists).
 with_list_entry() {
-  if [ "$FUEGO" = "$REPO/script/fuego" ]; then
-    mkdir -p "$TEST_DIR/repo/script"
-    cp "$REPO/script/fuego" "$TEST_DIR/repo/script/fuego"
-    cp -R "$REPO/lists" "$TEST_DIR/repo/lists"
-    FUEGO="$TEST_DIR/repo/script/fuego"
-  fi
+  repo_copy
   printf '%s\n' "$2" >> "$TEST_DIR/repo/lists/$1"
+}
+
+# with_list FILE LINES: runs the script from a copy of the repo whose lists/FILE holds only LINES.
+with_list() {
+  repo_copy
+  printf '%s\n' "$2" > "$TEST_DIR/repo/lists/$1"
+}
+
+# repo_copy: from now on, runs the script from a copy of the repo, whose lists a test may change.
+repo_copy() {
+  [ "$FUEGO" = "$REPO/script/fuego" ] || return 0
+  mkdir -p "$TEST_DIR/repo/script"
+  cp "$REPO/script/fuego" "$TEST_DIR/repo/script/fuego"
+  cp -R "$REPO/lists" "$TEST_DIR/repo/lists"
+  FUEGO="$TEST_DIR/repo/script/fuego"
 }
 
 # launcher_apk: writes a fake Launcher APK (the fake TV reads its "package=", "home=" and

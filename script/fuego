@@ -304,7 +304,8 @@ listed() {
 }
 
 # load_lists: reads the four package lists into KEEP_LIST, MUST_KEEP_LIST, KNOWN_BLOAT_LIST and
-# TAKEOVER_PACKAGES, one package ID per line.
+# TAKEOVER_PACKAGES, one package ID per line, and SETUP_WIZARD, the Takeover Package casting can
+# depend on: the first one on its list (lists/README.md).
 load_lists() {
   local file
   for file in keep.txt must-keep.txt known-bloat.txt takeover.txt; do
@@ -314,6 +315,7 @@ load_lists() {
   MUST_KEEP_LIST=$(listed must-keep.txt)
   KNOWN_BLOAT_LIST=$(listed known-bloat.txt)
   TAKEOVER_PACKAGES=$(listed takeover.txt)
+  SETUP_WIZARD=$(printf '%s\n' "$TAKEOVER_PACKAGES" | head -n 1)
 }
 
 # contains LINES WORD: whether WORD is one of the newline-separated LINES.
@@ -726,9 +728,6 @@ GITHUB_REPO=danajerban/fuego-os
 LATEST_RELEASE_API="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
 RELEASE_DOWNLOADS="https://github.com/$GITHUB_REPO/releases/download"
 RELEASES_PAGE="https://github.com/$GITHUB_REPO/releases"
-
-# The setup wizard, the Takeover Package casting can depend on (lists/takeover.txt).
-SETUP_WIZARD=com.google.android.tungsten.setupwraith
 
 # The APK given with apply --launcher, or the one launcher_apk downloaded, and how the report
 # names where it came from.

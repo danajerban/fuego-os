@@ -7,7 +7,7 @@ The four package lists the script reads. [GLOSSARY.md](../GLOSSARY.md) defines e
 | `keep.txt` | Keep List | Nothing directly: every entry is also on the Must-Keep List |
 | `must-keep.txt` | Must-Keep List | Never disables it. It wins over every other list |
 | `known-bloat.txt` | Known-Bloat List | Debloat disables these, and only these |
-| `takeover.txt` | Takeover Packages | Only the Home Takeover disables them |
+| `takeover.txt` | Takeover Packages | Only the Home Takeover disables them, in the list's order. The first entry is the setup wizard: it goes off first, and the Casting Fallback re-enables it alone |
 
 A package on none of the lists is reported by `probe`, never disabled.
 

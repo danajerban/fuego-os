@@ -59,6 +59,20 @@ casting-fallback.home-focus=$SETUP_WIZARD/.RecoveryActivity" \
   assert_output_contains "already off, 0 failed;"
 }
 
+test_casting_fallback_re_enables_the_setup_wizard_the_takeover_list_names_first() {
+  # A TV whose setup wizard is another package.
+  rm "$FAKE_TV/packages/$SETUP_WIZARD"
+  fake_tv_home_activity com.fuego.setup/.Wizard 1
+  with_list takeover.txt "com.fuego.setup|false|Setup wizard
+$STOCK_LAUNCHER|false|Stock Launcher"
+  run_fuego_answering "$(takeover_and_checks no yes yes yes)" apply --launcher "$(launcher_apk)"
+  assert_status 0
+  assert_output_contains "enabled      com.fuego.setup"
+  assert_equals enabled "$(fake_tv_package_state com.fuego.setup)"
+  assert_equals disabled-user "$(fake_tv_package_state "$STOCK_LAUNCHER")"
+  assert_equals "" "$(fake_tv_writes | grep "$SETUP_WIZARD")" "writes to a package not on the list"
+}
+
 test_apply_after_the_casting_fallback_leaves_the_setup_wizard_on_unless_the_owner_says_yes() {
   local answer
   run_fuego_answering "$(takeover_and_checks no yes yes yes)" apply --launcher "$(launcher_apk)"
