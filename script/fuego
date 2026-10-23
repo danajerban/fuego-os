@@ -29,8 +29,15 @@ Commands:
   connect ADDRESS          connect to the TV, using the "IP address & Port" from the TV's
                            Wireless debugging screen
   probe                    report the TV's chip, RAM, storage, Android build, every package
-                           with the lists it is on, and its available memory and Home draw
-                           time. Changes nothing (Home is restarted to time it)
+                           with the lists it is on, and its available memory, Launcher memory
+                           and Home draw time. Changes nothing (Home is restarted to time it)
+  apply [--dry-run]        save the Snapshot (first run only), disable the Known-Bloat List,
+                           set animation scales to 0.5, and measure before and after. Safe to
+                           run again. --dry-run: list what would change and write nothing
+  restore                  put package states and animation scales back to the Snapshot
+
+The Snapshot is kept on this Mac at $SNAPSHOT
+(set FUEGO_STATE_DIR to keep it elsewhere).
 
 TV setup steps: $SETUP_DOC
 EOF
@@ -673,6 +680,56 @@ cmd_apply() {
   [ "$FAILED_COUNT" -eq 0 ]
 }
 
+# --- Restore -------------------------------------------------------------------------------
+
+# Every package on the Snapshot goes back to its recorded state. A package the Snapshot has as
+# disabled is disabled again, unless it is on the Must-Keep List, which always wins.
+restore_packages() {
+  local pkg was now same=0
+  say "Packages"
+  for pkg in $(snapshot_keys package.); do
+    was=$(snapshot_value "package.$pkg")
+    [ "$was" = missing ] && continue
+    now=$(package_state "$pkg")
+    if [ "$now" = "$was" ]; then
+      same=$((same + 1))
+    elif [ "$now" = missing ]; then
+      outcome failed "$pkg ($was in the Snapshot, not installed now)"
+    elif [ "$was" = disabled ] && contains "$MUST_KEEP_LIST" "$pkg"; then
+      outcome skipped "$pkg (disabled in the Snapshot, but on the Must-Keep List)"
+    else
+      set_package_state "$pkg" "$was"
+    fi
+  done
+  outcome unchanged "$same packages already as in the Snapshot"
+}
+
+restore_animation_scales() {
+  local key
+  say "Animation scales"
+  for key in $ANIMATION_SCALES; do
+    set_setting global "$key" "$(snapshot_value "setting.global.$key")"
+  done
+}
+
+cmd_restore() {
+  [ $# -eq 0 ] || { usage >&2; exit 2; }
+  load_lists
+  [ -f "$SNAPSHOT" ] || die "No Snapshot at $SNAPSHOT: apply has not changed this TV from this Mac," \
+    "so there is nothing to restore."
+  require_tv
+  say "Restoring the TV to the Snapshot taken $(snapshot_value taken) ($SNAPSHOT)"
+  say
+  # The steps, in order. Each prints what it changed back and keeps going when one fails.
+  restore_packages
+  say
+  restore_animation_scales
+  say
+  say "Summary: $((DISABLED_COUNT + CHANGED_COUNT)) changed back," \
+    "$((SKIPPED_COUNT + FAILED_COUNT)) not changed back"
+  [ "$FAILED_COUNT" -eq 0 ]
+}
+
 main() {
   local command=${1-}
   [ $# -gt 0 ] && shift
@@ -680,6 +737,7 @@ main() {
     check) cmd_check "$@" ;;
     probe) cmd_probe "$@" ;;
     apply) cmd_apply "$@" ;;
+    restore) cmd_restore "$@" ;;
     pair) cmd_pair "$@" ;;
     connect) cmd_connect "$@" ;;
     help | -h | --help) usage ;;
