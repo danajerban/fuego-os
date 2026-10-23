@@ -27,3 +27,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - `check --build` asks for build-tools 36.0.0 (what the Launcher's Android Gradle Plugin needs) and fails when that folder is missing from the SDK.
+- The list check also fails when a Takeover Package is on the Must-Keep List, and skips lines of only spaces as the script does.

@@ -96,6 +96,10 @@ d=$(fresh blank-with-spaces)
 printf '  \t\n' >>"$d/known-bloat.txt"
 run_check "a line of only spaces and tabs is skipped, as the script skips it" "$d" 0 "lists OK"
 
+d=$(fresh takeover-and-must-keep)
+echo 'com.example.launcher|false|Wrongly listed as Must-Keep' >>"$d/must-keep.txt"
+run_check "a Takeover Package on Must-Keep fails" "$d" 1 "com.example.launcher is a Takeover Package and must not be on the Must-Keep List"
+
 d=$(fresh missing-list)
 rm "$d/takeover.txt"
 run_check "a missing list file fails" "$d" 1 "takeover.txt"

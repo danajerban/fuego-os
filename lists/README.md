@@ -40,7 +40,7 @@ lists/check_test.sh   # tests the check itself
 The check fails when:
 
 - a package is on both the Must-Keep List and the Known-Bloat List,
-- a Takeover Package is on the Known-Bloat List,
+- a Takeover Package is on the Known-Bloat List or the Must-Keep List,
 - a Keep List app is missing from the Must-Keep List,
 - an entry has a malformed package name, a `confirmed_on_tv` other than `true` or `false`, or no reason,
 - a list file is missing.

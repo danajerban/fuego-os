@@ -87,6 +87,10 @@ for pkg in $(on_both takeover.txt known-bloat.txt); do
   problem "$pkg is a Takeover Package and must not be on the Known-Bloat List"
 done
 
+for pkg in $(on_both takeover.txt must-keep.txt); do
+  problem "$pkg is a Takeover Package and must not be on the Must-Keep List"
+done
+
 if [ "$problems" -gt 0 ]; then
   exit 1
 fi
