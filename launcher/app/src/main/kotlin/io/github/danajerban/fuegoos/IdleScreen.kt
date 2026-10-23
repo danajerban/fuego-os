@@ -1,16 +1,14 @@
 package io.github.danajerban.fuegoos
 
 import android.graphics.Bitmap
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import android.service.dreams.DreamService
 import android.widget.ImageView
 
 /**
  * The Idle Screen: the TV's screensaver. It shows the same [Artwork] as Home, from its own place in the
  * pictures, dimmed to half brightness, and cross-fades to the next picture every minute. When the
- * Artwork Folder is empty it shows the Ember gradient slowly moving instead ([EmberView]). It runs only
+ * Artwork Folder is empty it shows the Ember gradient slowly moving instead ([EmberView]). The clock
+ * ([ClockView]) shows over it, bright above the dimming, larger than on Home, drifting a little every minute. It runs only
  * while the TV is idle; between dreams the Launcher holds no artwork and runs nothing.
  */
 class IdleScreen : DreamService() {
@@ -18,6 +16,7 @@ class IdleScreen : DreamService() {
     private lateinit var shown: ImageView
     private lateinit var incoming: ImageView
     private lateinit var ember: EmberView
+    private lateinit var clockView: ClockView
     private lateinit var artwork: Artwork
 
     /** Counts pictures, so one decoded after the dream stopped, or after a newer one, is never shown. */
@@ -33,11 +32,18 @@ class IdleScreen : DreamService() {
         shown = findViewById(R.id.artwork_front)
         incoming = findViewById(R.id.artwork_back)
         ember = findViewById(R.id.ember)
+        clockView = findViewById<ClockView>(R.id.clock).apply {
+            drifts = true
+            scaleX = CLOCK_SCALE
+            scaleY = CLOCK_SCALE
+            alpha = CLOCK_ALPHA
+        }
         artwork = Artwork(this, Artwork.Screen.IDLE_SCREEN)
     }
 
     override fun onDreamingStarted() {
         super.onDreamingStarted()
+        clockView.start()
         showNext()
     }
 
@@ -51,6 +57,7 @@ class IdleScreen : DreamService() {
         }
         ember.animate().cancel()
         ember.stop()
+        clockView.stop()
         super.onDreamingStopped()
     }
 
@@ -101,29 +108,14 @@ class IdleScreen : DreamService() {
         }
     }
 
-    companion object {
-        private const val CHANGE_MS = 60_000L
-        private const val FADE_MS = 1_000L
+    private companion object {
+        const val CHANGE_MS = 60_000L
+        const val FADE_MS = 1_000L
 
-        private val mainThread = Handler(Looper.getMainLooper())
+        /** How much bigger the Idle Screen's clock is than Home's. */
+        const val CLOCK_SCALE = 1.5f
 
-        /** When the next picture comes, and how far the gradient has moved. Tests replace it with a clock they move by hand. */
-        var clock: Clock = object : Clock {
-            override fun now() = SystemClock.uptimeMillis()
-
-            override fun schedule(delayMs: Long, action: Runnable): AutoCloseable {
-                mainThread.postDelayed(action, delayMs)
-                return AutoCloseable { mainThread.removeCallbacks(action) }
-            }
-        }
+        /** The clock is over the veil, a little softer than Home's: its 90% white shows at about 83%. */
+        const val CLOCK_ALPHA = 0.92f
     }
-}
-
-/** Runs the Idle Screen's picture changes and times its gradient's motion. */
-interface Clock {
-    /** The time now, in milliseconds since some fixed point. */
-    fun now(): Long
-
-    /** Runs [action] on the main thread after [delayMs]; closing the result cancels it. */
-    fun schedule(delayMs: Long, action: Runnable): AutoCloseable
 }

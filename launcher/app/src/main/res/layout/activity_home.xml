@@ -12,6 +12,13 @@
         android:importantForAccessibility="no"
         android:scaleType="centerCrop" />
 
+    <include
+        layout="@layout/clock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|top"
+        android:layout_marginTop="@dimen/clock_margin_top" />
+
     <!-- The glass band: the Dock's frosted backing, with the focus highlight floating under the tiles. -->
     <io.github.danajerban.fuegoos.GlassBand
         android:id="@+id/dock_band"

@@ -4,7 +4,10 @@
     android:layout_height="@dimen/dock_tile_height"
     android:layout_marginHorizontal="@dimen/dock_tile_gap"
     android:background="@drawable/dock_tile_resting"
+    android:drawablePadding="@dimen/dock_tile_icon_gap"
     android:focusable="true"
     android:gravity="center"
+    android:paddingTop="@dimen/dock_tile_padding_top"
+    android:paddingBottom="@dimen/dock_tile_padding_bottom"
     android:textColor="@android:color/white"
     android:textSize="@dimen/dock_tile_text" />

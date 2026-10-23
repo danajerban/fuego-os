@@ -4,4 +4,19 @@
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:windowShowWallpaper">false</item>
     </style>
+
+    <!-- The clock's time and date: bold frosted white, 90% opaque, with a soft shadow under it. The
+         padding leaves the shadow room, which the text's own bounds would cut off. A shader for a lit
+         top edge is left out: Android draws the shadow with the text's shader, as a white glow. -->
+    <style name="ClockText">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:padding">@dimen/clock_text_padding</item>
+        <item name="android:shadowColor">#66000000</item>
+        <item name="android:shadowDy">2</item>
+        <item name="android:shadowRadius">12</item>
+        <item name="android:textColor">#E6FFFFFF</item>
+        <item name="android:textStyle">bold</item>
+    </style>
 </resources>

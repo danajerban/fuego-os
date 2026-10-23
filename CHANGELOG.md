@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-23
+
+### Changed
+
+- The Dock's tiles show an icon above their label: each app's own launcher icon, read from the TV when Home opens without holding up its first frame (an app with no icon keeps its label alone), and the Launcher's own white line icons for Inputs and Settings. The tiles are clearer glass with a light edge, so Ember shows through more, and Ember is 9% darker on Home and the Idle Screen.
+- The Dock's tiles are narrower, so all six fit on the TV's 960dp-wide screen, and the apps' icons have rounded corners.
+
+### Added
+
+- A clock on Home, above the Dock, and on the Idle Screen, larger and bright over the dimmed artwork: the time over a hairline and the date, in the TV's locale and 12/24-hour setting, moving on exactly at each minute. On the Idle Screen it drifts a few dp every minute against burn-in.
+
 ## [0.2.0] - 2026-10-23
 
 ### Changed

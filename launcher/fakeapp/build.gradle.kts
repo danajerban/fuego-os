@@ -16,6 +16,8 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1"
+        // Each Dock app's fake has an icon of its own colour (see DockApp in the UI tests); others are grey.
+        resValue("color", "icon", "#808080")
     }
 
     buildFeatures {
@@ -28,21 +30,25 @@ android {
             dimension = "dockApp"
             applicationId = "com.netflix.ninja"
             resValue("string", "app_name", "Fake Netflix")
+            resValue("color", "icon", "#E50914")
         }
         create("youtube") {
             dimension = "dockApp"
             applicationId = "com.google.android.youtube.tv"
             resValue("string", "app_name", "Fake YouTube")
+            resValue("color", "icon", "#FF0033")
         }
         create("stremio") {
             dimension = "dockApp"
             applicationId = "com.stremio.one"
             resValue("string", "app_name", "Fake Stremio")
+            resValue("color", "icon", "#7B5BF5")
         }
         create("spotify") {
             dimension = "dockApp"
             applicationId = "com.spotify.tv.android"
             resValue("string", "app_name", "Fake Spotify")
+            resValue("color", "icon", "#1DB954")
         }
         // The TV's inputs, which the emulator lacks: HDMI ports for the Inputs screen to list.
         create("tvinputs") {

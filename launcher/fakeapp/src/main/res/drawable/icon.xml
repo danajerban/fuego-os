@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A Fake Dock App's icon: a plain square in its flavour's colour, so the UI tests can tell it on screen. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/icon" />
+    <size
+        android:width="96dp"
+        android:height="96dp" />
+</shape>

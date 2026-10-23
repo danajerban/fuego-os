@@ -24,7 +24,7 @@ import android.widget.FrameLayout
 class GlassBand(context: Context, attrs: AttributeSet?) : FrameLayout(context, attrs) {
     private val radius = resources.getDimension(R.dimen.dock_band_corner)
     private val frost = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private val tint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33FFFFFF }
+    private val tint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x1AFFFFFF }
     private val rim = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = resources.displayMetrics.density
