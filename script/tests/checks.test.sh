@@ -36,6 +36,29 @@ check.remote-buttons=works" "$(grep '^check\.' "$(checks_file)")" "recorded answ
   assert_equals disabled-user "$(fake_tv_package_state "$STOCK_LAUNCHER")"
 }
 
+test_casting_broken_re_enables_only_the_setup_wizard_and_records_what_has_home_focus() {
+  run_fuego_answering "$(takeover_and_checks no yes yes yes)" apply --launcher "$(launcher_apk)"
+  assert_status 0
+  assert_equals "write shell input keyevent KEYCODE_HOME
+write shell pm enable $SETUP_WIZARD
+write shell input keyevent KEYCODE_HOME" \
+    "$(fake_tv_writes | grep -e 'pm enable' -e keyevent)" "writes from the Home press on"
+  assert_equals enabled "$(fake_tv_package_state "$SETUP_WIZARD")"
+  assert_equals disabled-user "$(fake_tv_package_state "$STOCK_LAUNCHER")"
+  assert_output_contains "Casting Fallback: turning the setup wizard back on, alone; the Stock Launcher stays disabled."
+  assert_output_contains "enabled      $SETUP_WIZARD"
+  # The setup wizard answers Home too, and outranks the Launcher on the fake TV.
+  assert_output_contains "checked      Home focus after a Home press: $SETUP_WIZARD/.RecoveryActivity"
+  assert_output_contains "Home now opens $SETUP_WIZARD/.RecoveryActivity, not the Launcher."
+  assert_output_contains "Casting should work now: cast from your phone again."
+  assert_equals "check.casting=broken
+casting-fallback=done
+casting-fallback.home-focus=$SETUP_WIZARD/.RecoveryActivity" \
+    "$(grep -e '^check.casting=' -e '^casting-fallback' "$(checks_file)")" "recorded fallback"
+  grep -q -e 'check' -e 'casting' "$(snapshot_file)" && fail "the fallback went into the Snapshot"
+  assert_output_contains "already off, 0 failed;"
+}
+
 test_check_step_is_skipped_with_skip_checks() {
   run_fuego_answering "$(takeover_and_checks no no no no)" apply --skip-checks --launcher "$(launcher_apk)"
   assert_status 0

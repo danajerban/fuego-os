@@ -1010,6 +1010,32 @@ apply_check_step() {
 check.$name=$answer"
   done
   record_checks "$answers" && say "  Answers recorded in $CHECKS"
+  if contains "$answers" check.casting=broken; then
+    say
+    casting_fallback
+  fi
+}
+
+# The setup wizard, the Takeover Package casting can depend on (lists/takeover.txt).
+SETUP_WIZARD=com.google.android.tungsten.setupwraith
+
+# The Casting Fallback: casting can need the setup wizard, so it is turned back on alone and read
+# back. The Stock Launcher stays disabled. Home is pressed and what has focus is reported, then the
+# result is recorded with the answers.
+casting_fallback() {
+  say "Casting Fallback: turning the setup wizard back on, alone; the Stock Launcher stays disabled."
+  if ! set_package_state "$SETUP_WIZARD" enabled; then
+    tv_still_reachable
+    say "  Casting may stay broken. fuego restore puts the TV back to the Snapshot."
+    record_checks "casting-fallback=failed"
+    return 0
+  fi
+  home_press_opens_launcher || say "  Home now opens ${FOCUS:-nothing}, not the Launcher."
+  outcome checked "Home focus after a Home press: ${FOCUS:-nothing}"
+  tv_still_reachable
+  say "  Casting should work now: cast from your phone again."
+  record_checks "casting-fallback=done
+casting-fallback.home-focus=${FOCUS:-nothing}" && say "  Recorded in $CHECKS"
 }
 
 cmd_apply() {
