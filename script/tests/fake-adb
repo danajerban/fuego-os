@@ -1,0 +1,573 @@
+#!/bin/bash
+# The fake TV: stands in for adb in the script's tests (FUEGO_ADB points here).
+#
+# It answers the adb calls the script makes the way a real TV does, holding the TV's state as
+# plain files in $FAKE_TV (made by fake_tv_new in lib.sh):
+#
+#   packages/<package>     "<state> <kind>": state enabled|disabled-user|disabled, kind system|user
+#   home-activities        "<component> <priority>" for each activity that answers the Home intent.
+#                          Home opens the enabled one with the highest priority; the chosen one
+#                          wins only among equals, and two equals with none chosen give the chooser
+#   home                   the Home activity set with set-home-activity (absent: none chosen)
+#   focus                  the focused activity, or "null"
+#   settings/<ns>/<key>    settings values (ns: global, secure, system)
+#   props/<name>           getprop values
+#   meminfo                "<MemTotal kB> <MemAvailable kB>"
+#   storage                /data as "<1K-blocks> <used> <available>"
+#   home-draw-ms           how long a cold start of Home takes to draw
+#   processes/<package>    a running package's TOTAL PSS in kB (dumpsys meminfo)
+#   sdcard/                files under /sdcard (also reachable as /storage/emulated/0)
+#   link/                  pairing and connection: pair-address, pairing-code, address,
+#                          paired (present once paired), connected (connected addresses)
+#   faults/                misbehaviour, see fake_tv_fault in lib.sh
+#   calls                  every call, one per line: "read ARGS", "write ARGS" or "unsupported ARGS"
+#
+# The script runs one plain command per `adb shell` (no pipes, quotes or redirects on the TV)
+# and filters output on the Mac, so the fake only needs to know each command, not a shell.
+# A call the fake doesn't know fails with exit status 64: teach it the call here, answering
+# exactly as a real TV does, and add a test for it in fake-tv.test.sh.
+#
+# FAKE_TV_INSPECT=1 lets tests read state through the fake without logging or faults.
+
+set -u
+tv=${FAKE_TV:?FAKE_TV must point at a fake TV made by fake_tv_new}
+
+inspecting() { [ -n "${FAKE_TV_INSPECT-}" ]; }
+fault() { ! inspecting && [ -e "$tv/faults/$1" ]; }
+
+# A write to a target listed in faults/ignore-writes answers as usual but changes nothing.
+ignored() {
+  [ -f "$tv/faults/ignore-writes" ] && grep -qxF "$1" "$tv/faults/ignore-writes"
+}
+
+# faults/offline-after: the TV leaves the network right after the write call it names.
+after_write() {
+  [ -f "$tv/faults/offline-after" ] || return 0
+  case "$call" in
+    *"$(cat "$tv/faults/offline-after")"*)
+      : > "$tv/faults/offline"
+      rm -f "$tv/faults/offline-after"
+      ;;
+  esac
+}
+
+die() {
+  printf '%s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+# --- The link between the Mac and the TV -----------------------------------------------------
+
+connected() {
+  ! fault debugging-off && [ -s "$tv/link/connected" ]
+}
+
+need_device() {
+  inspecting && return 0
+  fault offline && die "error: device offline"
+  connected || die "error: no devices/emulators found"
+  if [ -n "$serial" ] && ! grep -qxF "$serial" "$tv/link/connected"; then
+    die "error: device '$serial' not found"
+  fi
+}
+
+pair() {
+  local address=${1-} code=${2-}
+  if fault offline || fault debugging-off || [ "$address" != "$(cat "$tv/link/pair-address")" ]; then
+    die "Failed: Unable to start pairing client."
+  fi
+  [ "$code" = "$(cat "$tv/link/pairing-code")" ] ||
+    die "Failed: Wrong password or connection was dropped."
+  : > "$tv/link/paired"
+  echo "Successfully paired to $address [guid=adb-GoogleTV8164-fake]"
+}
+
+# adb connect prints its failures on stdout and exits 0, so the script must read the output.
+connect() {
+  local address=${1-}
+  if fault offline; then
+    echo "failed to connect to '$address': Operation timed out"
+  elif fault debugging-off || [ "$address" != "$(cat "$tv/link/address")" ]; then
+    echo "failed to connect to '$address': Connection refused"
+  elif [ ! -e "$tv/link/paired" ]; then
+    echo "failed to authenticate to $address"
+  elif grep -qxF "$address" "$tv/link/connected"; then
+    echo "already connected to $address"
+  else
+    echo "$address" >> "$tv/link/connected"
+    echo "connected to $address"
+  fi
+}
+
+disconnect() {
+  : > "$tv/link/connected"
+  echo "disconnected ${1-everything}"
+}
+
+devices() {
+  echo "List of devices attached"
+  if connected; then
+    while read -r address; do
+      if fault offline; then printf '%s\toffline\n' "$address"; else printf '%s\tdevice\n' "$address"; fi
+    done < "$tv/link/connected"
+  fi
+  echo
+}
+
+# --- Packages ----------------------------------------------------------------------------
+
+package_state() {
+  local state kind
+  read -r state kind < "$tv/packages/$1"
+  echo "$state"
+}
+
+package_enabled() {
+  [ -f "$tv/packages/$1" ] && [ "$(package_state "$1")" = enabled ]
+}
+
+list_packages() {
+  local only_disabled="" only_enabled="" only_system="" file pkg state kind
+  for flag in "$@"; do
+    case "$flag" in
+      -d) only_disabled=1 ;;
+      -e) only_enabled=1 ;;
+      -s) only_system=1 ;;
+      *) unsupported ;;
+    esac
+  done
+  for file in "$tv"/packages/*; do
+    pkg=${file##*/}
+    read -r state kind < "$file"
+    [ -n "$only_disabled" ] && [ "$state" = enabled ] && continue
+    [ -n "$only_enabled" ] && [ "$state" != enabled ] && continue
+    [ -n "$only_system" ] && [ "$kind" != system ] && continue
+    echo "package:$pkg"
+  done
+}
+
+set_package_state() {
+  local command=$1 pkg=$2 new=$3 state kind
+  if [ ! -f "$tv/packages/$pkg" ]; then
+    {
+      echo
+      echo "Exception occurred while executing '$command':"
+      echo "java.lang.IllegalArgumentException: Unknown package: $pkg"
+      printf '\tat com.android.server.pm.PackageManagerService.setEnabledSettings(PackageManagerService.java:3904)\n'
+    } >&2
+    exit 255
+  fi
+  if ! ignored "$pkg"; then
+    read -r state kind < "$tv/packages/$pkg"
+    printf '%s %s\n' "$new" "$kind" > "$tv/packages/$pkg"
+    # Disabling a package stops it.
+    [ "$new" = enabled ] || stop_package "$pkg"
+  fi
+  echo "Package $pkg new state: $new"
+}
+
+# stop_package PACKAGE: the package stops running, and its activity loses focus.
+stop_package() {
+  rm -f "$tv/processes/$1"
+  case "$(cat "$tv/focus")" in "$1"/*) echo null > "$tv/focus" ;; esac
+}
+
+# The fake APK is a text file: "package=<id>" and any number of "home=<component>" lines.
+# An installed app's Home activities get priority 0: Android ignores priority for them.
+install() {
+  local apk="" pkg home
+  for arg in "$@"; do
+    case "$arg" in -*) ;; *) apk=$arg ;; esac
+  done
+  if [ ! -f "$apk" ]; then
+    echo "Performing Streamed Install"
+    die "adb: failed to stat $apk: No such file or directory"
+  fi
+  pkg=$(sed -n 's/^package=//p' "$apk")
+  if [ -z "$pkg" ]; then
+    echo "Performing Incremental Install"
+    echo "Performing Streamed Install"
+    die "adb: failed to install $apk: Failure [INSTALL_PARSE_FAILED_NOT_APK: Failed to parse /data/app/vmdl2012248553.tmp/base.apk: Failed to load asset path /data/app/vmdl2012248553.tmp/base.apk]"
+  fi
+  echo "Performing Streamed Install"
+  if ! ignored "$pkg"; then
+    printf 'enabled user\n' > "$tv/packages/$pkg"
+    sed -n 's/^home=//p' "$apk" | while read -r home; do
+      home_candidate "$home" > /dev/null || echo "$home 0" >> "$tv/home-activities"
+    done
+  fi
+  echo "Success"
+}
+
+uninstall() {
+  local pkg=${1-}
+  [ -f "$tv/packages/$pkg" ] || die "Failure [DELETE_FAILED_INTERNAL_ERROR]"
+  if ! ignored "$pkg"; then
+    stop_package "$pkg"
+    rm -f "$tv/packages/$pkg"
+    rm -rf "$tv/sdcard/Android/data/$pkg"
+    grep -v "^$pkg/" "$tv/home-activities" > "$tv/home-activities.new"
+    mv "$tv/home-activities.new" "$tv/home-activities"
+  fi
+  echo "Success"
+}
+
+# --- Home and focus ----------------------------------------------------------------------
+
+# Components print as "package/.Class" (short) or "package/package.Class" (long).
+long_form() {
+  local pkg=${1%%/*} class=${1#*/}
+  case "$class" in .*) class=$pkg$class ;; esac
+  echo "$pkg/$class"
+}
+
+short_form() {
+  local pkg=${1%%/*} class=${1#*/}
+  case "$class" in "$pkg".*) class=${class#"$pkg"} ;; esac
+  echo "$pkg/$class"
+}
+
+# home_candidate COMPONENT: the priority of COMPONENT when it answers the Home intent.
+home_candidate() {
+  local want component priority
+  want=$(long_form "$1")
+  while read -r component priority; do
+    if [ "$(long_form "$component")" = "$want" ]; then
+      echo "$priority"
+      return 0
+    fi
+  done < "$tv/home-activities"
+  return 1
+}
+
+# resolve_home: "<priority> <component>" for the activity the Home button opens now.
+resolve_home() {
+  local chosen top="" component priority first="" count=0
+  chosen=$(cat "$tv/home" 2> /dev/null)
+  while read -r component priority; do
+    package_enabled "${component%%/*}" || continue
+    if [ -z "$top" ] || [ "$priority" -gt "$top" ]; then top=$priority; fi
+  done < "$tv/home-activities"
+  [ -n "$top" ] || return 1
+  while read -r component priority; do
+    package_enabled "${component%%/*}" && [ "$priority" = "$top" ] || continue
+    if [ -n "$chosen" ] && [ "$(long_form "$component")" = "$(long_form "$chosen")" ]; then
+      echo "$top $(short_form "$component")"
+      return 0
+    fi
+    count=$((count + 1))
+    [ -n "$first" ] || first=$component
+  done < "$tv/home-activities"
+  if [ "$count" -eq 1 ]; then
+    echo "$top $(short_form "$first")"
+  else
+    echo "0 android/com.android.internal.app.ResolverActivity"
+  fi
+}
+
+resolve_activity() {
+  case " $* " in
+    *" android.intent.category.HOME "*) ;;
+    *) unsupported ;;
+  esac
+  local home
+  home=$(resolve_home) || { echo "No activity found"; return 0; }
+  echo "priority=${home%% *} preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true"
+  echo "${home#* }"
+}
+
+# Any installed and enabled package is accepted, whatever the activity; only Home presses show
+# whether the choice took.
+set_home_activity() {
+  local component=""
+  for arg in "$@"; do
+    case "$arg" in --user|0) ;; *) component=$arg ;; esac
+  done
+  package_enabled "${component%%/*}" || die "Error: Failed to set default home."
+  ignored home || echo "$component" > "$tv/home"
+  echo "Success"
+}
+
+# The HOME role: the package chosen with set-home-activity while it is installed, otherwise the
+# package Home opens.
+role_holders() {
+  [ "$*" = "--user 0 android.app.role.HOME" ] || unsupported
+  local chosen home
+  chosen=$(cat "$tv/home" 2> /dev/null)
+  if [ -n "$chosen" ] && [ -f "$tv/packages/${chosen%%/*}" ]; then
+    echo "${chosen%%/*}"
+  elif home=$(resolve_home); then
+    home=${home#* }
+    echo "${home%%/*}"
+  fi
+}
+
+keyevent() {
+  case "${1-}" in
+    KEYCODE_HOME | 3)
+      local home
+      if ! ignored focus && home=$(resolve_home); then
+        echo "${home#* }" > "$tv/focus"
+      fi
+      ;;
+  esac
+}
+
+# As on API 34, the focus lines are in the displays section, not in the window list. The focused
+# window names its activity in long form, the focused app in short form.
+dumpsys_window_windows() {
+  local focus
+  focus=$(cat "$tv/focus")
+  echo "WINDOW MANAGER WINDOWS (dumpsys window windows)"
+  [ "$focus" = null ] || echo "  Window #0 Window{5e1f2a u0 $(long_form "$focus")}:"
+}
+
+dumpsys_window() {
+  local focus
+  focus=$(cat "$tv/focus")
+  echo
+  echo "WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)"
+  if [ "$focus" = null ]; then
+    echo "  mCurrentFocus=null"
+    echo "  mFocusedApp=null"
+  else
+    echo "  mCurrentFocus=Window{5e1f2a u0 $(long_form "$focus")}"
+    echo "  mFocusedApp=ActivityRecord{8c3d1b u0 $(short_form "$focus") t7}"
+  fi
+  dumpsys_window_windows
+}
+
+# am start -W -S -n COMPONENT: stops the app, starts the activity cold and reports its timing.
+# Only the activities that answer the Home intent exist on the fake TV.
+am_start() {
+  [ "$*" = "-W -S -n ${4-}" ] || unsupported
+  local component=$4 pkg=${4%%/*} class=${4#*/} total
+  echo "Starting: Intent { cmp=$component }"
+  if ! home_candidate "$component" > /dev/null || ! package_enabled "$pkg"; then
+    case "$class" in .*) class=$pkg$class ;; esac
+    echo "Error type 3"
+    echo "Error: Activity class {$pkg/$class} does not exist."
+    return 0
+  fi
+  echo "$component" > "$tv/focus"
+  total=$(cat "$tv/home-draw-ms")
+  echo "Status: ok"
+  echo "LaunchState: COLD"
+  echo "Activity: $component"
+  echo "TotalTime: $total"
+  echo "WaitTime: $((total + 8))"
+  echo "Complete"
+}
+
+# dumpsys meminfo PACKAGE: the package's memory summary while it runs, as API 34 prints it
+# (shortened). processes/<package> holds its TOTAL PSS in kB; no file means it isn't running.
+dumpsys_meminfo() {
+  local pss
+  if [ ! -f "$tv/processes/$1" ]; then
+    echo "No process found for: $1"
+    return 0
+  fi
+  pss=$(cat "$tv/processes/$1")
+  echo "Applications Memory Usage (in Kilobytes):"
+  echo "Uptime: 86357 Realtime: 86357"
+  echo
+  echo "** MEMINFO in pid 924 [$1] **"
+  echo "                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap"
+  echo "                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free"
+  printf '        TOTAL %8s     2332     1856     6687   120076    19137    11609     2980\n' "$pss"
+  echo " "
+  echo " App Summary"
+  echo "                       Pss(KB)                        Rss(KB)"
+  echo "                        ------                         ------"
+  echo "           Java Heap:      876                          35388"
+  echo " "
+  printf '           TOTAL PSS: %8s            TOTAL RSS:   120076       TOTAL SWAP PSS:     6687\n' "$pss"
+}
+
+# --- Settings and properties -------------------------------------------------------------
+
+settings_get() {
+  if [ -f "$tv/settings/$1/$2" ]; then cat "$tv/settings/$1/$2"; else echo null; fi
+}
+
+# settings list NAMESPACE: every set value as "key=value", sorted as the TV sorts them.
+settings_list() {
+  local key
+  (cd "$tv/settings/$1" && LC_ALL=C ls) | while read -r key; do
+    printf '%s=%s\n' "$key" "$(cat "$tv/settings/$1/$key")"
+  done
+}
+
+settings_put() {
+  ignored "$1/$2" || printf '%s\n' "$3" > "$tv/settings/$1/$2"
+}
+
+settings_delete() {
+  if [ -f "$tv/settings/$1/$2" ]; then
+    ignored "$1/$2" || rm -f "$tv/settings/$1/$2"
+    echo "Deleted 1 rows"
+  else
+    echo "Deleted 0 rows"
+  fi
+}
+
+# The kernel's memory report, as `cat /proc/meminfo` prints it (first lines only).
+meminfo() {
+  local total available
+  read -r total available < "$tv/meminfo"
+  printf '%-16s%8s kB\n' MemTotal: "$total" MemFree: $((available / 4)) MemAvailable: "$available"
+}
+
+# df -k /data, as toybox prints it: the Used column is as wide as its value.
+df_data() {
+  local total used available width
+  read -r total used available < "$tv/storage"
+  width=${#used}
+  [ "$width" -lt 4 ] && width=4
+  printf '%-16s %9s %*s %9s %4s %s\n' Filesystem 1K-blocks "$width" Used Available Use% "Mounted on"
+  printf '%-16s %9s %*s %9s %4s %s\n' /dev/block/dm-37 "$total" "$width" "$used" "$available" \
+    "$(((used * 100 + used + available - 1) / (used + available)))%" /data/user/0
+}
+
+getprop() {
+  if [ $# -eq 0 ]; then
+    for file in "$tv"/props/*; do echo "[${file##*/}]: [$(cat "$file")]"; done
+  elif [ -f "$tv/props/$1" ]; then
+    cat "$tv/props/$1"
+  else
+    echo
+  fi
+}
+
+# --- Files under /sdcard -----------------------------------------------------------------
+
+# Maps a TV path under /sdcard to the fake TV's copy; anything else is unsupported.
+sdcard_path() {
+  case "$1" in
+    /sdcard | /sdcard/*) echo "$tv/sdcard${1#/sdcard}" ;;
+    /storage/emulated/0 | /storage/emulated/0/*) echo "$tv/sdcard${1#/storage/emulated/0}" ;;
+    *) unsupported ;;
+  esac
+}
+
+push() {
+  local remote target source count=$#
+  remote=${!count}
+  target=$(sdcard_path "$remote") || exit $?
+  for source in "${@:1:$((count - 1))}"; do
+    [ -e "$source" ] || die "adb: error: cannot stat '$source': No such file or directory"
+    if ignored "$remote"; then
+      :
+    elif [ -d "$target" ] || case "$remote" in */) true ;; *) false ;; esac; then
+      mkdir -p "$target" && cp -R "$source" "$target/"
+    else
+      mkdir -p "$(dirname "$target")" && cp -R "$source" "$target"
+    fi
+    echo "$source: 1 file pushed, 0 skipped."
+  done
+}
+
+ls_path() {
+  local path=""
+  for arg in "$@"; do
+    case "$arg" in -*) ;; *) path=$arg ;; esac
+  done
+  local target
+  target=$(sdcard_path "$path") || exit $?
+  [ -e "$target" ] || die "ls: $path: No such file or directory"
+  if [ -d "$target" ]; then
+    (cd "$target" && for entry in *; do [ -e "$entry" ] && echo "$entry"; done)
+  else
+    echo "$path"
+  fi
+}
+
+mkdir_path() {
+  local path=""
+  for arg in "$@"; do
+    case "$arg" in -*) ;; *) path=$arg ;; esac
+  done
+  local target
+  target=$(sdcard_path "$path") || exit $?
+  ignored "$path" || mkdir -p "$target"
+}
+
+# --- Dispatch ----------------------------------------------------------------------------
+
+unsupported() {
+  kind=unsupported
+  die "fake TV: unsupported adb call: $call" 64
+}
+
+# Each call is logged once, on exit, so a call that fails part-way is still logged.
+kind=unsupported
+log() {
+  kind=$1
+}
+# shellcheck disable=SC2329 # run by the EXIT trap
+record() {
+  inspecting || echo "$kind $call" >> "$tv/calls"
+}
+trap record EXIT
+
+# Like adb, the fake reads whatever is waiting on its input, so a script that lets adb have the
+# owner's input loses their answers. (The test runner gives every test an empty input.)
+if ! inspecting && [ ! -t 0 ]; then
+  cat > /dev/null
+fi
+
+call="$*"
+serial=""
+if [ "${1-}" = "-s" ]; then
+  serial=${2-}
+  shift 2
+  call="$*"
+fi
+
+# adb joins the words after "shell" into one command line for the TV's shell.
+if [ "${1-}" = "shell" ]; then
+  shift
+  set -f
+  # shellcheck disable=SC2048,SC2086 # split the joined command line into words, as the TV does
+  set -- shell $*
+  set +f
+fi
+
+case "$*" in
+  "shell pm list packages"*) log read; need_device; shift 4; list_packages "$@" ;;
+  "shell pm disable-user"*) log write; need_device; set_package_state disable-user "${!#}" disabled-user ;;
+  "shell pm enable"*) log write; need_device; set_package_state enable "${!#}" enabled ;;
+  "shell settings get "*) log read; need_device; settings_get "$4" "$5" ;;
+  "shell settings put "*) log write; need_device; settings_put "$4" "$5" "$6" ;;
+  "shell settings list "*) log read; need_device; settings_list "$4" ;;
+  "shell settings delete "*) log write; need_device; settings_delete "$4" "$5" ;;
+  "shell getprop"*) log read; need_device; shift 2; getprop "$@" ;;
+  "shell cmd package resolve-activity"*) log read; need_device; shift 3; resolve_activity "$@" ;;
+  "shell cmd role get-role-holders"*) log read; need_device; shift 4; role_holders "$@" ;;
+  "shell cmd package set-home-activity"*) log write; need_device; shift 3; set_home_activity "$@" ;;
+  "shell input keyevent"*) log write; need_device; keyevent "${4-}" ;;
+  "shell dumpsys window") log read; need_device; dumpsys_window ;;
+  "shell dumpsys window windows") log read; need_device; dumpsys_window_windows ;;
+  "shell dumpsys meminfo "*) log read; need_device; dumpsys_meminfo "$4" ;;
+  "shell cat /proc/meminfo") log read; need_device; meminfo ;;
+  "shell df -k /data") log read; need_device; df_data ;;
+  # Starting Home to time it changes no stored state (packages, settings, the Home choice).
+  "shell am start"*) log read; need_device; shift 3; am_start "$@" ;;
+  "shell ls"*) log read; need_device; shift 2; ls_path "$@" ;;
+  "shell mkdir"*) log write; need_device; shift 2; mkdir_path "$@" ;;
+  "install "*) log write; need_device; shift; install "$@" ;;
+  "uninstall "*) log write; need_device; uninstall "${2-}" ;;
+  "push "*) log write; need_device; shift; push "$@" ;;
+  "get-state") log read; need_device; echo device ;;
+  "pair "*) log write; pair "${2-}" "${3-}" ;;
+  "connect "*) log read; connect "${2-}" ;;
+  "disconnect"*) log read; disconnect "${2-}" ;;
+  "devices") log read; devices ;;
+  "version") log read; echo "Android Debug Bridge version 1.0.41 (fake TV)" ;;
+  *) unsupported ;;
+esac
+status=$?
+if [ "$status" -eq 0 ] && [ "$kind" = write ]; then
+  after_write
+fi
+exit "$status"

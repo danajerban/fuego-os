@@ -2,7 +2,7 @@
 
 Makes one Fuego 2K Google TV (Android TV OS 14) fast and free of Bloat, over ADB, without root.
 
-> **Status: pre-release, design stage.** There is no code yet and nothing here has been tried on the TV. The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1); the words it uses are in [GLOSSARY.md](GLOSSARY.md).
+> **Status: pre-release, being built.** The script's `check`, `pair`, `connect` and `probe`, the package lists and the Launcher's base are in place; `apply`, `restore` and the rest of the Launcher are not yet. Nothing here has been tried on the TV. The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1); the words it uses are in [GLOSSARY.md](GLOSSARY.md), and the decisions behind it in [docs/adr/](docs/adr/).
 
 > **Not affiliated with Fuego, Google, Netflix, YouTube, Stremio or Spotify.** Use it at your own risk.
 
@@ -11,7 +11,7 @@ Makes one Fuego 2K Google TV (Android TV OS 14) fast and free of Bloat, over ADB
 Two pieces:
 
 - **A Mac script** that talks to the TV over ADB:
-  - `probe`: reads facts from the TV (chip, RAM, storage, Android build, package list) and changes nothing.
+  - `probe`: reads facts from the TV (chip, RAM, storage, Android build, package list with the lists each package is on), flags packages on none of the lists, measures available memory and Home draw time, and changes nothing.
   - `apply`: takes a Snapshot (once, never overwritten), runs Debloat against a reviewed known-Bloat list, installs the Launcher, performs the Home Takeover, applies light speed settings, then checks the result. It has a dry-run flag and is safe to run again.
   - `restore`: puts the TV back to the Snapshot.
 - **A Launcher** of our own: Kotlin with plain Android Views. A glass dock (Netflix, YouTube, Stremio, Spotify, Inputs, Settings) over full-screen artwork, in the style of Home+, and an Idle Screen that replaces Google's ambient mode as the TV's screensaver. No internet permission, and nothing runs while it is off screen except that screensaver.
@@ -34,13 +34,34 @@ There is no public firmware for this TV, and unlocking it would cost Netflix HD 
 
 ## Quick start
 
-> **Not yet available.** There is nothing to download or run yet. This section will hold the steps once the first release (`v0.1.0`) is out: turning on Developer options and Wireless debugging, pairing the Mac, then `probe`, `apply` and `restore`.
+You need a Mac and `adb` (`brew install --cask android-platform-tools`).
 
-Releases will carry the Launcher APK and the script bundle.
+1. **Download** `fuego-os-vX.Y.Z.tar.gz` and `SHA256SUMS` from the [latest release](https://github.com/danajerban/fuego-os/releases/latest), check the bundle and unpack it:
+
+   ```sh
+   cd ~/Downloads
+   shasum -a 256 -c SHA256SUMS --ignore-missing
+   tar -xzf fuego-os-v*.tar.gz
+   cd fuego-os-v*/
+   script/fuego check
+   ```
+
+2. **Set up the TV**: turn on Developer options and Wireless debugging, then pair and connect the Mac, as [docs/tv-setup.md](docs/tv-setup.md) shows step by step:
+
+   ```sh
+   script/fuego pair IP:PAIRING-PORT CODE
+   script/fuego connect IP:PORT
+   ```
+
+3. **Look before changing anything**: `script/fuego probe` reports the TV and every package with the lists it is on. Changes nothing.
+4. **Apply**: `script/fuego apply --dry-run` lists what would change; `script/fuego apply` saves the Snapshot, runs Debloat, sets the Speed Settings, installs the Launcher and takes over Home after your yes. The Launcher APK comes from the latest release and is installed only if it matches its checksum in that release's `SHA256SUMS`; `--launcher APK` installs a local APK instead.
+5. **Undo**: `script/fuego restore` puts the TV back to the Snapshot (see [How to undo](#how-to-undo)).
 
 ## How to undo
 
 - `restore` puts back everything the Snapshot recorded, hands Home back to the Stock Launcher and uninstalls the Launcher. It works even if the Launcher was already uninstalled.
+- The Snapshot is a text file on the Mac, at `~/Library/Application Support/fuego-os/snapshot` (set `FUEGO_STATE_DIR` to keep it elsewhere). Keep it: it is the way back. Your answers to the Check Step go in a separate `checks` file beside it, so the Snapshot is never rewritten.
+- If casting breaks after the Home Takeover, answer "no" to the casting check: `apply` turns the setup wizard back on (the Casting Fallback) and leaves it on in later runs unless you say yes to disabling it again.
 - A factory reset also undoes everything: Debloat applies to the TV's user only, and the Launcher is an ordinary app.
 
 ## Contributing and security

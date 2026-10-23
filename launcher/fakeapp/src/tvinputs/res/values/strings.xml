@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fake_hdmi_1">HDMI 1</string>
+    <string name="fake_hdmi_2">HDMI 2</string>
+    <string name="fake_cec_device">Fake console</string>
+    <string name="fake_tuner">Fake tuner</string>
+</resources>

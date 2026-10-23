@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <!-- Package visibility: only the Dock's apps (see Dock.kt), Settings and the TV's inputs, nothing else on the TV.
+         Settings is the owner's way back to Wireless debugging, so its tile must never vanish. -->
+    <queries>
+        <package android:name="com.netflix.ninja" />
+        <package android:name="com.google.android.youtube.tv" />
+        <package android:name="com.stremio.one" />
+        <package android:name="com.spotify.tv.android" />
+        <intent>
+            <action android:name="android.settings.SETTINGS" />
+        </intent>
+        <!-- The TV's inputs: their names live in the packages that serve them. -->
+        <intent>
+            <action android:name="android.media.tv.TvInputService" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:banner="@drawable/banner"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@drawable/banner"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Fuego">
+
+        <activity
+            android:name=".HomeActivity"
+            android:clearTaskOnLaunch="true"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".InputsActivity"
+            android:excludeFromRecents="true"
+            android:exported="false" />
+
+        <!-- The Idle Screen, the TV's screensaver; the Launcher's only service. Only the system may bind it. -->
+        <service
+            android:name=".IdleScreen"
+            android:exported="true"
+            android:label="@string/idle_screen"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

@@ -1,0 +1,19 @@
+# Must-Keep List: never disabled, and it wins over every other list.
+# Format: package|confirmed_on_tv|reason  (see lists/README.md)
+# From research (docs/research/), confirm each entry with probe.
+com.google.android.gms|false|Google Play Services: YouTube sign-in, Netflix, DRM and casting need it
+com.google.android.gsf|false|Google Services Framework: Play Services needs it
+com.android.vending|false|Play Store: installs and updates the Keep List apps
+com.google.android.tv.remote.service|false|Remote service: disabling it breaks the remote
+com.android.location.fused|false|Fused location: a boot loop is reported when it is disabled
+com.google.android.apps.mediashell|false|Cast receiver: casting from a phone
+com.android.tv.settings|false|TV Settings: the Settings tile, Wi-Fi, and the way back to Wireless debugging
+com.google.android.tv.inputplayer|false|TV input player: opens the HDMI inputs
+# System updater: the package name varies by maker and is not known yet.
+# probe finds it; add it here before the first release.
+
+# The Keep List apps (keep.txt), repeated so the script reads one file.
+com.netflix.ninja|false|On the Keep List: Netflix
+com.google.android.youtube.tv|false|On the Keep List: YouTube
+com.stremio.one|false|On the Keep List: Stremio
+com.spotify.tv.android|false|On the Keep List: Spotify
