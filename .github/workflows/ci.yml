@@ -90,7 +90,7 @@ jobs:
       - name: Build, lint and check the merged manifests
         run: ./gradlew build checkDebugLauncherManifest checkReleaseLauncherManifest
 
-      - name: Adding INTERNET to the manifest fails the build
+      - name: Adding INTERNET or a second service to the manifest fails the build
         run: ./manifest_check_test.sh
 
   launcher-ui-tests:
