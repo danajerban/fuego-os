@@ -989,6 +989,53 @@ restore_animation_scales() {
   done
 }
 
+# Home goes back to the Snapshot's Home activity. It runs after restore_packages, because the TV
+# refuses a Home activity whose package is disabled.
+restore_home() {
+  local want
+  say "Home"
+  want=$(snapshot_value home)
+  if [ "$want" = none ]; then
+    outcome unchanged "no Home activity in the Snapshot"
+  elif [ "$(home_role_holder)" = "${want%%/*}" ]; then
+    outcome unchanged "Home activity already $want"
+  else
+    set_home "$want"
+  fi
+}
+
+# The Launcher is uninstalled unless it was on the TV before the first apply. It goes last, and
+# only once Home no longer opens it, so Home never points at a missing app. Then Home is checked
+# against the Snapshot.
+restore_launcher() {
+  local want home output
+  say "Launcher"
+  want=$(snapshot_value home)
+  home=$(home_activity) || home=none
+  if [ "$(snapshot_value launcher)" = installed ]; then
+    outcome unchanged "$LAUNCHER_PACKAGE kept: it was installed before the first apply"
+  elif [ "$(package_state "$LAUNCHER_PACKAGE")" = missing ]; then
+    outcome unchanged "$LAUNCHER_PACKAGE already uninstalled"
+  elif [ "${home%%/*}" = "$LAUNCHER_PACKAGE" ]; then
+    outcome failed "$LAUNCHER_PACKAGE kept: Home still opens it, and without it Home would open nothing"
+  else
+    output=$(adb_call uninstall "$LAUNCHER_PACKAGE" 2>&1)
+    if [ "$(package_state "$LAUNCHER_PACKAGE")" = missing ]; then
+      outcome uninstalled "$LAUNCHER_PACKAGE"
+    else
+      outcome failed "$LAUNCHER_PACKAGE (still installed after uninstall: $(printf '%s\n' "$output" | tail -n 1))"
+    fi
+    home=$(home_activity) || home=none
+  fi
+  if [ "$want" = none ]; then
+    return 0
+  elif [ "$home" = "$want" ]; then
+    outcome checked "Home opens $home, as in the Snapshot"
+  else
+    outcome failed "Home opens $home, not $want as in the Snapshot"
+  fi
+}
+
 cmd_restore() {
   [ $# -eq 0 ] || { usage >&2; exit 2; }
   load_lists
@@ -1001,6 +1048,10 @@ cmd_restore() {
   restore_packages
   say
   restore_animation_scales
+  say
+  restore_home
+  say
+  restore_launcher
   say
   say "Summary: $((DISABLED_COUNT + CHANGED_COUNT)) changed back," \
     "$((SKIPPED_COUNT + FAILED_COUNT)) not changed back"
