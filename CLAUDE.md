@@ -15,6 +15,7 @@ Makes one Fuego 2K Google TV (Android TV OS 14) fast and free of Bloat over ADB,
 - `lists/`: the four package lists as data; format and check in [lists/README.md](lists/README.md).
 - `launcher/`: the Gradle project. `app/` is the Launcher; `fakeapp/` builds the Fake Dock Apps its UI tests install.
 - `docs/tv-setup.md`: the owner's Wireless debugging steps; the script's messages link to it.
+- `docs/releasing.md`: how a release is made and the signing key kept. `docs/budgets.md`: every recorded run of `launcher/measure_budgets.sh`.
 
 ## Rules for code
 
@@ -32,11 +33,10 @@ Settled; build on them rather than reopening them.
 
 - ADB only, no root ([0001](docs/adr/0001-adb-only-no-root.md)). Debloat is `pm disable-user --user 0` on the Known-Bloat List only; the Must-Keep List wins ([0002](docs/adr/0002-disable-only-reviewed-packages.md)).
 - The Home Takeover disables both Takeover Packages, guarded by a Wi-Fi warning, a focus check with rollback, the Check Step and the Casting Fallback ([0003](docs/adr/0003-home-takeover-disables-both-takeover-packages.md)).
-- The Snapshot lives on the Mac, is written once, and records every field from #4 on ([0004](docs/adr/0004-snapshot-written-once-on-the-mac.md)).
+- The Snapshot lives on the Mac, is written once, and records every field `apply` changes; `restore` reads only those fields, never the settings copies saved beside it ([0004](docs/adr/0004-snapshot-written-once-on-the-mac.md)).
 - Speed Settings: animation scales 0.5×; background process limit and Play auto-updates never written ([0006](docs/adr/0006-speed-settings.md)).
 - Launcher app ID `io.github.danajerban.fuegoos`, API 34 only. The Artwork Folder is the Launcher's `getExternalFilesDir("artwork")` (`/sdcard/Android/data/io.github.danajerban.fuegoos/files/artwork/`).
 - Code borrowed from CleanYourTV (MIT) keeps its attribution in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and in the source file.
-- Script tickets #5, #6 and #7 go in that order: they share the `apply` flow.
 
 ## Toolchain
 

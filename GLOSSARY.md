@@ -46,7 +46,7 @@
 
 **Measurements**: The numbers `probe` reports and `apply` prints before and after: available memory, Home Draw Time and the Launcher's memory.
 
-**Home Draw Time**: How long the Home activity takes to start and draw, as the TV's activity manager times it.
+**Home Draw Time**: How long Home takes to draw when the owner comes back to it from another screen, as the TV's activity manager times it.
 
 ## The Launcher
 

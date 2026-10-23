@@ -8,4 +8,4 @@ To make the Launcher what Home opens, the script sets it as the Home activity an
 
 ## Consequences
 
-Disabling `setupwraith` breaks casting on Google's own hardware and can delete a Wi-Fi network saved during setup ([android-tv-launchers.md](../research/android-tv-launchers.md) §2). So the script installs the Launcher first, makes the takeover a separate step, asks for the owner's yes to a Wi-Fi warning, checks which app has focus after a Home press and rolls back if it isn't the Launcher, then runs the Check Step and offers the Casting Fallback.
+Disabling `setupwraith` breaks casting on Google's own hardware and can delete a Wi-Fi network saved during setup ([android-tv-launchers.md](../research/android-tv-launchers.md) §2). So the script installs the Launcher first, makes the takeover a separate step, asks for the owner's yes to a Wi-Fi warning (on a no, Home goes back to the app that held it before), checks which app has focus after a Home press and rolls back if it isn't the Launcher, then runs the Check Step and offers the Casting Fallback.
