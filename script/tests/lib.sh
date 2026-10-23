@@ -4,10 +4,14 @@
 #   - a fresh fake TV in $FAKE_TV, paired and connected, holding the state below;
 #   - FUEGO_ADB pointing at the fake TV, so the script's adb boundary talks to it;
 #   - an empty HOME at $TEST_DIR/mac, standing in for the owner's Mac;
-#   - an adb on PATH that fails the test if anything calls it instead of FUEGO_ADB.
+#   - an adb on PATH that fails the test if anything calls it instead of FUEGO_ADB;
+#   - a fake GitHub in $FAKE_GITHUB with no release published, and FUEGO_FETCH pointing at it, so
+#     the script's download boundary talks to it;
+#   - a curl on PATH that fails the test if anything downloads outside FUEGO_FETCH.
 #
 # Fake TV state is plain files (see fake-adb for the layout). Use the fake_tv_* helpers below to
-# shape it, and to read it back in assertions.
+# shape it, and to read it back in assertions. The fake GitHub's layout is in fake-github, and the
+# fake_github_* helpers shape it.
 
 # shellcheck shell=bash
 # shellcheck disable=SC2034 # OUTPUT and STATUS are read by the tests
@@ -29,17 +33,28 @@ echo "real adb called with: \$*" >> "$TEST_DIR/real-adb-calls"
 exit 99
 EOF
   chmod +x "$TEST_DIR/bin/adb"
+  cat > "$TEST_DIR/bin/curl" <<EOF
+#!/bin/bash
+echo "real curl called with: \$*" >> "$TEST_DIR/real-curl-calls"
+exit 99
+EOF
+  chmod +x "$TEST_DIR/bin/curl"
   # Waiting for the TV (after a Home press) takes no time in tests.
   printf '#!/bin/sh\nexit 0\n' > "$TEST_DIR/bin/sleep"
   chmod +x "$TEST_DIR/bin/sleep"
   export PATH="$TEST_DIR/bin:$PATH"
   export FUEGO_ADB="$TESTS/fake-adb"
+  export FUEGO_FETCH="$TESTS/fake-github"
   fake_tv_new
+  fake_github_new
 }
 
 test_teardown() {
   if [ -f "$TEST_DIR/real-adb-calls" ]; then
     fail "adb was called outside the FUEGO_ADB boundary: $(cat "$TEST_DIR/real-adb-calls")"
+  fi
+  if [ -f "$TEST_DIR/real-curl-calls" ]; then
+    fail "curl was called outside the FUEGO_FETCH boundary: $(cat "$TEST_DIR/real-curl-calls")"
   fi
 }
 
@@ -304,4 +319,39 @@ fake_tv_calls() {
 
 fake_tv_writes() {
   grep '^write ' "$FAKE_TV/calls"
+}
+
+# --- The fake GitHub -----------------------------------------------------------------------
+
+# fake_github_new: the project's GitHub before any release is published.
+fake_github_new() {
+  export FAKE_GITHUB="$TEST_DIR/github"
+  rm -rf "$FAKE_GITHUB"
+  mkdir -p "$FAKE_GITHUB/releases"
+  : > "$FAKE_GITHUB/calls"
+}
+
+# fake_github_release TAG: publishes release TAG as the latest, with the fake Launcher APK and a
+# SHA256SUMS listing its checksum, named as the release workflow names them.
+fake_github_release() {
+  local dir="$FAKE_GITHUB/releases/$1"
+  mkdir -p "$dir"
+  cp "$(launcher_apk)" "$dir/fuego-os-launcher-$1.apk"
+  (cd "$dir" && shasum -a 256 "fuego-os-launcher-$1.apk") > "$dir/SHA256SUMS"
+  printf '%s\n' "$1" > "$FAKE_GITHUB/latest"
+}
+
+# fake_github_asset TAG NAME: where release TAG keeps its asset NAME, to change it in a test.
+fake_github_asset() {
+  echo "$FAKE_GITHUB/releases/$1/$2"
+}
+
+# fake_github_offline: the Mac has no network, so every download fails.
+fake_github_offline() {
+  : > "$FAKE_GITHUB/offline"
+}
+
+# fake_github_calls: every URL the script downloaded so far, one per line.
+fake_github_calls() {
+  cat "$FAKE_GITHUB/calls"
 }

@@ -34,9 +34,28 @@ There is no public firmware for this TV, and unlocking it would cost Netflix HD 
 
 ## Quick start
 
-> **Not yet available.** There is nothing to download or run yet. This section will hold the steps once the first release (`v0.1.0`) is out: turning on Developer options and Wireless debugging, pairing the Mac, then `probe`, `apply` and `restore`.
+You need a Mac and `adb` (`brew install --cask android-platform-tools`).
 
-Releases will carry the Launcher APK and the script bundle.
+1. **Download** `fuego-os-vX.Y.Z.tar.gz` and `SHA256SUMS` from the [latest release](https://github.com/danajerban/fuego-os/releases/latest), check the bundle and unpack it:
+
+   ```sh
+   cd ~/Downloads
+   shasum -a 256 -c SHA256SUMS --ignore-missing
+   tar -xzf fuego-os-v*.tar.gz
+   cd fuego-os-v*/
+   script/fuego check
+   ```
+
+2. **Set up the TV**: turn on Developer options and Wireless debugging, then pair and connect the Mac, as [docs/tv-setup.md](docs/tv-setup.md) shows step by step:
+
+   ```sh
+   script/fuego pair IP:PAIRING-PORT CODE
+   script/fuego connect IP:PORT
+   ```
+
+3. **Look before changing anything**: `script/fuego probe` reports the TV and every package with the lists it is on. Changes nothing.
+4. **Apply**: `script/fuego apply --dry-run` lists what would change; `script/fuego apply` saves the Snapshot, runs Debloat, sets the Speed Settings, installs the Launcher and takes over Home after your yes. The Launcher APK comes from the latest release and is installed only if it matches its checksum in that release's `SHA256SUMS`; `--launcher APK` installs a local APK instead.
+5. **Undo**: `script/fuego restore` puts the TV back to the Snapshot (see [How to undo](#how-to-undo)).
 
 ## How to undo
 
