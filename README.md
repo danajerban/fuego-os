@@ -2,7 +2,7 @@
 
 Makes one Fuego 2K Google TV (Android TV OS 14) fast and free of Bloat, over ADB, without root.
 
-> **Status: pre-release, design stage.** There is no code yet and nothing here has been tried on the TV. The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1); the words it uses are in [GLOSSARY.md](GLOSSARY.md).
+> **Status: pre-release, being built.** The script's `check`, `pair`, `connect` and `probe`, the package lists and the Launcher's base are in place; `apply`, `restore` and the rest of the Launcher are not yet. Nothing here has been tried on the TV. The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1); the words it uses are in [GLOSSARY.md](GLOSSARY.md), and the decisions behind it in [docs/adr/](docs/adr/).
 
 > **Not affiliated with Fuego, Google, Netflix, YouTube, Stremio or Spotify.** Use it at your own risk.
 
