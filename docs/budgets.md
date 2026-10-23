@@ -2,6 +2,22 @@
 
 Each run of `launcher/measure_budgets.sh`, newest first. The budgets: the Dock drawn within 200 ms of Home when warm and 800 ms cold, and at most 40 MB of memory. How to run it is in [CONTRIBUTING.md](../CONTRIBUTING.md) under "Testing".
 
+## 2026-10-23: tv34 emulator, Dock icons and clearer glass
+
+- **Device:** the `tv34` AVD as below, started the same way, on the same Mac shared with other work.
+- **Build:** the release build (`assembleRelease`, shrunk) of commit `cbdc0a2`, signed with the debug key to install it. The Artwork Folder was empty, so Home showed Ember. YouTube (the emulator's own) and the Fake Dock Apps for Netflix, Stremio and Spotify were installed, so Home loaded four app icons; the script left Home for the fake Netflix.
+- **Runs:** 9.
+
+| Budget | Median | Worst | Runs | Budget |
+|---|---|---|---|---|
+| Cold Home Draw Time | 261 ms | 308 ms | 207, 261, 247, 272, 280, 233, 308, 266, 257 | 800 ms |
+| Warm Home Draw Time | 66 ms | 96 ms | 96, 61, 64, 67, 66, 75, 71, 30, 54 | 200 ms |
+| Memory (total PSS) on Home | 25 MB | 26 MB | 25 each but one 26 | 40 MB |
+
+All three are within budget on the emulator.
+
+**Against main under the same load:** main's release build (commit `fae8f93`), measured just before with the same apps installed over 9 runs, gave a cold median of 313 ms (worst 422), a warm median of 95 ms (worst 170) and 25 MB. The icons load on a background thread after Home's first frame, so the change should not slow Home; the lower numbers here are within the emulator's run-to-run noise, not a speed-up.
+
 ## 2026-10-23: tv34 emulator, the Ember gradient
 
 - **Device:** the `tv34` AVD as in the run below, started the same way, on the same Mac shared with other work.
