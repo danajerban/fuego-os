@@ -88,10 +88,9 @@ abstract class CheckLauncherManifest : DefaultTask() {
 
 /** Copies the fake apps' release APKs into a folder the UI tests ship as assets. */
 abstract class CollectFakeAppApks : DefaultTask() {
-    /** The fake apps' APK folder, read when the task runs: the APKs don't exist while Gradle configures. */
-    @get:InputDirectory
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val apkDir: DirectoryProperty
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val apks: ConfigurableFileCollection
 
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -102,17 +101,23 @@ abstract class CollectFakeAppApks : DefaultTask() {
     @TaskAction
     fun collect() {
         files.sync {
-            from(apkDir) { include("*/release/*.apk") }
+            from(apks)
+            into(outputDir)
+            // Flat, so each APK is an asset named after its file.
             eachFile { path = name }
             includeEmptyDirs = false
-            into(outputDir)
         }
     }
 }
 
 val fakeAppApks = tasks.register<CollectFakeAppApks>("collectFakeAppApks") {
-    apkDir.set(project(":fakeapp").layout.buildDirectory.dir("outputs/apk"))
-    dependsOn(":fakeapp:assembleRelease")
+    // A file tree, walked when the task runs. A set of files would be fixed when the configuration
+    // cache is stored, before :fakeapp has built any APK, and so be empty on a clean build.
+    apks.from(
+        project(":fakeapp").layout.buildDirectory.dir("outputs/apk")
+            .map { dir -> dir.asFileTree.matching { include("*/release/*.apk") } },
+    )
+    apks.builtBy(":fakeapp:assembleRelease")
 }
 
 androidComponents {

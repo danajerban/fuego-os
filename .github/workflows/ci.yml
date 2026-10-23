@@ -22,6 +22,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # The runner's own shellcheck (0.9.0) reports checks that newer releases renamed (SC2317 is
+      # SC2329 for unused functions from 0.10.0), so CI runs the release contributors run.
+      - name: Install shellcheck 0.11.0
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/shellcheck.tar.xz" https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-v0.11.0" >> "$GITHUB_PATH"
+
       # Every shell file under script/ and lists/ (by .sh name or executable bit), plus the
       # Launcher's shell tests. The sourced test files resolve their includes from the repo root.
       - name: Shellcheck the script, the list check and the shell tests
