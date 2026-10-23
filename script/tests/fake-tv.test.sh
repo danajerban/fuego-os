@@ -308,11 +308,66 @@ test_fake_tv_reports_storage_in_kilobyte_blocks() {
 /dev/block/dm-37  10167132 565024   9454652   6% /data/user/0" "$OUTPUT"
 }
 
-test_fake_tv_times_a_cold_start_of_home() {
+test_fake_tv_opens_settings_as_a_panel_over_home() {
   local home
   home=$(fake_tv_home)
+  adb_fake shell am start -W -a android.settings.SETTINGS
+  assert_status 0
+  assert_equals "Starting: Intent { act=android.settings.SETTINGS }
+Status: ok
+LaunchState: COLD
+Activity: com.android.tv.settings/.MainSettings
+TotalTime: 634
+WaitTime: 651
+Complete" "$OUTPUT"
+  assert_equals com.android.tv.settings/.MainSettings "$(fake_tv_focus)"
+  # Home stays drawn behind the panel, so bringing it back draws nothing new and has no time.
+  adb_fake shell am start -W -n "$home"
+  assert_status 0
+  assert_equals "Starting: Intent { cmp=$home }
+Warning: Activity not started, its current task has been brought to the front
+Status: ok
+LaunchState: UNKNOWN (0)
+Activity: $home
+TotalTime: 0
+WaitTime: 20
+Complete" "$OUTPUT"
+  assert_equals "$home" "$(fake_tv_focus)"
+}
+
+test_fake_tv_times_home_reopened_from_full_screen_settings() {
+  local home
+  home=$(fake_tv_home)
+  fake_tv_settings_full_screen
+  fake_tv_home_draw_ms 83
+  adb_fake shell am start -W -a android.settings.SETTINGS
+  adb_fake shell am start -W -n "$home"
+  assert_status 0
+  assert_equals "Starting: Intent { cmp=$home }
+Warning: Activity not started, its current task has been brought to the front
+Status: ok
+LaunchState: HOT
+Activity: $home
+TotalTime: 83
+WaitTime: 98
+Complete" "$OUTPUT"
+  assert_equals "$home" "$(fake_tv_focus)"
+}
+
+test_fake_tv_cannot_open_settings_without_its_app() {
+  fake_tv_set_package_state com.android.tv.settings disabled-user
+  adb_fake shell am start -W -a android.settings.SETTINGS
+  assert_status 0
+  assert_equals "Starting: Intent { act=android.settings.SETTINGS }
+Error: Activity not started, unable to resolve Intent { act=android.settings.SETTINGS flg=0x10000000 }" "$OUTPUT"
+}
+
+test_fake_tv_starts_an_activity_cold() {
+  local home
+  home=$(fake_tv_home)
+  echo null > "$FAKE_TV/focus"
   fake_tv_home_draw_ms 1432
-  adb_fake shell am start -W -S -n "$home"
+  adb_fake shell am start -W -n "$home"
   assert_status 0
   assert_equals "Starting: Intent { cmp=$home }
 Status: ok
@@ -325,11 +380,16 @@ Complete" "$OUTPUT"
 }
 
 test_fake_tv_cannot_start_a_missing_activity() {
-  adb_fake shell am start -W -S -n no.such.pkg/.Main
+  adb_fake shell am start -W -n no.such.pkg/.Main
   assert_status 0
   assert_equals "Starting: Intent { cmp=no.such.pkg/.Main }
 Error type 3
 Error: Activity class {no.such.pkg/no.such.pkg.Main} does not exist." "$OUTPUT"
+}
+
+test_fake_tv_refuses_to_force_stop_home_for_timing() {
+  adb_fake shell am start -W -S -n "$(fake_tv_home)"
+  assert_status 64
 }
 
 test_fake_tv_disables_and_enables_like_pm_on_a_package_it_does_not_know() {

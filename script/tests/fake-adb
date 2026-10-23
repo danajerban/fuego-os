@@ -14,7 +14,9 @@
 #   props/<name>           getprop values
 #   meminfo                "<MemTotal kB> <MemAvailable kB>"
 #   storage                /data as "<1K-blocks> <used> <available>"
-#   home-draw-ms           how long a cold start of Home takes to draw
+#   home-draw-ms           how long Home takes to draw when started or reopened from full-screen
+#                          Settings
+#   settings-full-screen   present: Settings opens full screen, not as Android TV's panel over Home
 #   processes/<package>    a running package's TOTAL PSS in kB (dumpsys meminfo)
 #   sdcard/                files under /sdcard (also reachable as /storage/emulated/0)
 #   app-folders/<package>  the folders an installed app makes under /sdcard/Android/data/<package>/
@@ -350,16 +352,21 @@ dumpsys_window() {
   dumpsys_window_windows
 }
 
-# am start -W [-S] -n COMPONENT: starts the activity (cold, after stopping the app, with -S) and
-# reports its timing. Started again without -S while it has focus, it gets the intent and no
-# timing. Only the activities that answer the Home intent exist on the fake TV.
+# Settings, as Android TV has it: a panel over Home, so Home stays drawn behind it.
+SETTINGS_ACTIVITY=com.android.tv.settings/.MainSettings
+
+# am start -W -n COMPONENT | -a android.settings.SETTINGS: starts the activity and reports its
+# timing, as an API 34 emulator prints it. Only the activities that answer the Home intent and
+# Settings exist on the fake TV. Started again while it has focus, it gets the intent and no timing;
+# brought back from behind the Settings panel, it was never hidden, so there is no timing either.
 am_start() {
-  local component=${!#} stop="" pkg class total
+  local component pkg class total
   case "$*" in
-    "-W -S -n $component") stop=1 ;;
-    "-W -n $component") ;;
+    "-W -a android.settings.SETTINGS") open_settings; return 0 ;;
+    "-W -n "*/*) component=$3 ;;
     *) unsupported ;;
   esac
+  [ $# -eq 3 ] || unsupported
   pkg=${component%%/*}
   class=${component#*/}
   echo "Starting: Intent { cmp=$component }"
@@ -369,24 +376,59 @@ am_start() {
     echo "Error: Activity class {$pkg/$class} does not exist."
     return 0
   fi
-  if [ -z "$stop" ] && [ "$(cat "$tv/focus")" = "$component" ]; then
-    echo "Warning: Activity not started, intent has been delivered to currently running top-most instance."
-    echo "Status: ok"
-    echo "LaunchState: UNKNOWN (0)"
-    echo "Activity: $component"
-    echo "TotalTime: 0"
-    echo "WaitTime: 19"
-    echo "Complete"
-    return 0
-  fi
+  total=$(cat "$tv/home-draw-ms")
+  case "$(cat "$tv/focus")" in
+    "$component")
+      echo "Warning: Activity not started, intent has been delivered to currently running top-most instance."
+      echo "Status: ok"
+      echo "LaunchState: UNKNOWN (0)"
+      echo "Activity: $component"
+      echo "TotalTime: 0"
+      echo "WaitTime: 19"
+      echo "Complete"
+      return 0
+      ;;
+    "$SETTINGS_ACTIVITY")
+      echo "$component" > "$tv/focus"
+      echo "Warning: Activity not started, its current task has been brought to the front"
+      echo "Status: ok"
+      if [ -e "$tv/settings-full-screen" ]; then
+        echo "LaunchState: HOT"
+        echo "Activity: $component"
+        echo "TotalTime: $total"
+        echo "WaitTime: $((total + 15))"
+      else
+        echo "LaunchState: UNKNOWN (0)"
+        echo "Activity: $component"
+        echo "TotalTime: 0"
+        echo "WaitTime: 20"
+      fi
+      echo "Complete"
+      return 0
+      ;;
+  esac
   echo "$component" > "$tv/focus"
   start_app "$pkg"
-  total=$(cat "$tv/home-draw-ms")
   echo "Status: ok"
   echo "LaunchState: COLD"
   echo "Activity: $component"
   echo "TotalTime: $total"
   echo "WaitTime: $((total + 8))"
+  echo "Complete"
+}
+
+open_settings() {
+  echo "Starting: Intent { act=android.settings.SETTINGS }"
+  if ! package_enabled "${SETTINGS_ACTIVITY%%/*}"; then
+    echo "Error: Activity not started, unable to resolve Intent { act=android.settings.SETTINGS flg=0x10000000 }"
+    return 0
+  fi
+  echo "$SETTINGS_ACTIVITY" > "$tv/focus"
+  echo "Status: ok"
+  echo "LaunchState: COLD"
+  echo "Activity: $SETTINGS_ACTIVITY"
+  echo "TotalTime: 634"
+  echo "WaitTime: 651"
   echo "Complete"
 }
 
@@ -605,7 +647,7 @@ case "$*" in
   "shell dumpsys meminfo "*) log read; need_device; dumpsys_meminfo "$4" ;;
   "shell cat /proc/meminfo") log read; need_device; meminfo ;;
   "shell df -k /data") log read; need_device; df_data ;;
-  # Starting Home to time it changes no stored state (packages, settings, the Home choice).
+  # Starting Home or Settings changes no stored state (packages, settings, the Home choice).
   "shell am start"*) log read; need_device; shift 3; am_start "$@" ;;
   "shell ls"*) log read; need_device; shift 2; ls_path "$@" ;;
   "shell mkdir"*) log write; need_device; shift 2; mkdir_path "$@" ;;

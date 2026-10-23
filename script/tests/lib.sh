@@ -278,9 +278,15 @@ fake_tv_storage() {
   printf '%s %s %s\n' "$1" "$2" "$3" > "$FAKE_TV/storage"
 }
 
-# fake_tv_home_draw_ms MS: how long a cold start of Home takes to draw.
+# fake_tv_home_draw_ms MS: how long Home takes to draw when it is started or reopened.
 fake_tv_home_draw_ms() {
   printf '%s\n' "$1" > "$FAKE_TV/home-draw-ms"
+}
+
+# fake_tv_settings_full_screen: Settings opens full screen, covering Home, rather than as the
+# panel over Home that Android TV's Settings is.
+fake_tv_settings_full_screen() {
+  : > "$FAKE_TV/settings-full-screen"
 }
 
 # fake_tv_process PACKAGE PSS_KB: the package is running and uses PSS_KB of memory.

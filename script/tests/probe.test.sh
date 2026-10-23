@@ -37,11 +37,31 @@ test_probe_tags_each_package_with_its_lists() {
 
 test_probe_measures_available_memory_and_home_draw_time() {
   fake_tv_memory 2025912 655360
-  fake_tv_home_draw_ms 1432
+  fake_tv_settings_full_screen
+  fake_tv_home_draw_ms 83
   run_fuego probe
   assert_status 0
   assert_output_contains "Available memory:  640 MB"
-  assert_output_contains "Home Draw Time:    1432 ms (cold start of com.google.android.apps.tv.launcherx/.home.HomeActivity)"
+  assert_output_contains "Home Draw Time:    83 ms (com.google.android.apps.tv.launcherx/.home.HomeActivity reopened from Settings, a hot start; budget 200 ms)"
+  assert_equals "read shell am start -W -a android.settings.SETTINGS
+read shell am start -W -n com.google.android.apps.tv.launcherx/.home.HomeActivity" \
+    "$(fake_tv_calls | grep ' am ')" "how Home is timed"
+  assert_equals com.google.android.apps.tv.launcherx/.home.HomeActivity "$(fake_tv_focus)" "focus afterwards"
+}
+
+test_probe_does_not_count_home_left_drawn_behind_the_settings_panel() {
+  run_fuego probe
+  assert_status 0
+  assert_output_contains "Home Draw Time:    not measured (Home stayed drawn behind Settings, so there was no redraw to time)"
+  assert_output_lacks "0 ms"
+}
+
+test_probe_says_when_settings_does_not_open() {
+  fake_tv_set_package_state com.android.tv.settings disabled-user
+  run_fuego probe
+  assert_status 0
+  assert_output_contains "Home Draw Time:    not measured (couldn't open Settings to leave Home: Error: Activity not started, unable to resolve Intent"
+  assert_equals "" "$(fake_tv_calls | grep ' am start -W -n')" "Home timed without leaving it"
 }
 
 test_probe_measures_the_launchers_memory() {
@@ -83,6 +103,7 @@ test_probe_changes_nothing_on_the_tv_or_the_mac() {
   run_fuego probe
   assert_status 0
   assert_equals "" "$(fake_tv_calls | grep -v '^read ')" "calls other than reads"
+  assert_equals "" "$(fake_tv_calls | grep -e ' -S ' -e force-stop -e ' kill')" "calls that stop an app"
   rm "$FAKE_TV/calls" "$TEST_DIR/tv-before/calls"
   diff -r "$TEST_DIR/tv-before" "$FAKE_TV" || fail "probe changed the TV"
   assert_equals "" "$(find "$HOME" "$TEST_DIR/cwd" "$TMPDIR" -mindepth 1)" "files written on the Mac"

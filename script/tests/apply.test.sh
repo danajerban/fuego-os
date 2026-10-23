@@ -188,13 +188,15 @@ test_apply_dry_run_after_a_real_run_keeps_the_snapshot() {
 }
 
 test_apply_prints_measurements_before_and_after() {
+  fake_tv_settings_full_screen
   run_fuego apply
   assert_status 0
   assert_equals 2 "$(printf '%s\n' "$OUTPUT" | grep -c '^  Available memory:  859 MB$')" \
     "available memory lines"
   assert_equals "Before
 After" "$(printf '%s\n' "$OUTPUT" | grep -e '^Before$' -e '^After$')" "measurement headings"
-  assert_output_contains "Home Draw Time:    1432 ms"
+  assert_equals 2 "$(printf '%s\n' "$OUTPUT" | grep -c '^  Home Draw Time:    1432 ms (')" \
+    "Home Draw Time lines"
 }
 
 test_apply_sets_animation_scales_to_half_and_no_other_setting() {
