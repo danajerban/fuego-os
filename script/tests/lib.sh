@@ -91,10 +91,10 @@ with_list_entry() {
   printf '%s\n' "$2" >> "$TEST_DIR/repo/lists/$1"
 }
 
-# launcher_apk: writes a fake Launcher APK (the fake TV reads its "package=" and "home=" lines)
-# and prints its path.
+# launcher_apk: writes a fake Launcher APK (the fake TV reads its "package=", "home=" and
+# "folder=" lines: the Launcher makes its Artwork Folder when it starts) and prints its path.
 launcher_apk() {
-  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\n' \
+  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\nfolder=files/artwork\n' \
     > "$TEST_DIR/launcher.apk"
   echo "$TEST_DIR/launcher.apk"
 }
