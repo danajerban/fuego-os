@@ -125,7 +125,8 @@ androidComponents {
         val variantName = variant.name.replaceFirstChar { it.uppercase() }
         val checkManifest = tasks.register<CheckLauncherManifest>("check${variantName}LauncherManifest") {
             mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
-            allowedServices.set(emptyList())
+            // The Idle Screen, the TV's screensaver, is the one service the Launcher may run.
+            allowedServices.set(listOf("io.github.danajerban.fuegoos.IdleScreen"))
             report.set(layout.buildDirectory.file("reports/launcher-manifest/${variant.name}.txt"))
         }
         tasks.named { it == "check" || it == "assemble$variantName" }.configureEach { dependsOn(checkManifest) }

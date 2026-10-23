@@ -8,4 +8,6 @@
     <string name="tile_inputs">Inputs</string>
     <string name="inputs_none">No HDMI inputs found</string>
     <string name="tile_settings">Settings</string>
+    <!-- The screensaver's name in the TV's Settings. -->
+    <string name="idle_screen">Fuego artwork</string>
 </resources>
