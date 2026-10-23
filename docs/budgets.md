@@ -1,6 +1,21 @@
 # The Launcher's budgets: measured numbers
 
-Each run of `launcher/measure_budgets.sh`, newest first. The budgets: the Dock drawn within 200 ms of Home when warm and 800 ms cold, and at most 40 MB of memory. How to run it is in [CONTRIBUTING.md](../CONTRIBUTING.md) under "Testing".
+Each run of `launcher/measure_budgets.sh`, newest first, and the real TV's numbers from `fuego apply` and `probe`. The budgets: the Dock drawn within 200 ms of Home when warm and 800 ms cold, and at most 40 MB of memory. How to run it is in [CONTRIBUTING.md](../CONTRIBUTING.md) under "Testing".
+
+## 2026-10-23: Real TV, the owner's Fuego 2K (ticket #14)
+
+- **Device:** the owner's Fuego 2K (MediaTek T56, 1414 MB of RAM, Android TV OS 14), over Wireless debugging. Details in [fuego-2k-packages.md](research/fuego-2k-packages.md).
+- **Build:** the Launcher v0.3.0 from the GitHub Release, signed with the release key, as the TV's Home; the Idle Screen numbers are from v0.2.0.
+- **How:** measured by `fuego apply` and `probe`, not `launcher/measure_budgets.sh`: that script installs its own build, which the TV's release-signed Launcher would refuse or be replaced by.
+
+| Budget | Measured | Budget |
+|---|---|---|
+| Home Draw Time | 85 ms (a hot start, back from the Inputs screen); the v0.2.0 run right after its update gave 173 ms, a warm start | 200 ms warm |
+| Memory (total PSS) on Home | 32.5 MB, graphics counted | 40 MB |
+
+Both are within budget. The TV had 534 MB of memory available.
+
+**The Idle Screen while dreaming** (v0.2.0, Ember moving): about 30 fps steady, 753 frames in about 25 s, 0.66% janky, about 13 ms per frame, about 13% of one core, and 43 MB PSS.
 
 ## 2026-10-23: tv34 emulator, the clock and six tiles that fit
 
@@ -68,4 +83,4 @@ All three are within budget on the emulator.
 
 **The gap in the memory number:** the emulator's `dumpsys meminfo` reports `Graphics: 0`, so the artwork, a hardware bitmap of about 8 MB at 1080p, is not counted. With it, the Launcher's memory on Home is estimated at about 32 MB against the 40 MB budget. That estimate is not a measurement.
 
-**What counts:** these are emulator numbers. The real numbers, on the TV with its own chip and graphics memory, are for ticket #14.
+**What counts:** these are emulator numbers. The real numbers, on the TV with its own chip and graphics memory, are in the Real TV run at the top.
