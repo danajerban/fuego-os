@@ -35,10 +35,11 @@ Commands:
   probe                    report the TV's chip, RAM, storage, Android build, every package
                            with the lists it is on, and its available memory, Launcher memory
                            and Home draw time. Changes nothing (Home is restarted to time it)
-  apply [--dry-run] [--skip-checks] [--launcher APK]
+  apply [--dry-run] [--skip-checks] [--launcher APK] [--pictures FOLDER]
                            save the Snapshot (first run only), disable the Known-Bloat List,
                            set animation scales to 0.5, install the Launcher, make it what Home
-                           opens (after your yes), ask you to check casting, HDMI inputs, Wi-Fi
+                           opens (after your yes), set its Idle Screen as the screensaver in place
+                           of Google's ambient mode, ask you to check casting, HDMI inputs, Wi-Fi
                            and the remote's buttons, and measure before and after. If casting is
                            broken, the setup wizard alone is turned back on. Safe to run again:
                            it redoes the Home Takeover if a TV update undid it.
@@ -46,8 +47,10 @@ Commands:
                            --skip-checks: leave the checks for the next apply
                            --launcher APK: install this APK instead of the one from the latest
                            release (downloaded and checked against the release's SHA256SUMS)
-  restore                  put package states, animation scales and Home back to the Snapshot,
-                           and uninstall the Launcher
+                           --pictures FOLDER: copy the JPEG and PNG pictures in FOLDER to the TV
+                           as the Launcher's artwork
+  restore                  put package states, animation scales, the screensaver and Home back
+                           to the Snapshot, and uninstall the Launcher
 
 The Snapshot is kept on this Mac at $SNAPSHOT
 and your check answers beside it, at $CHECKS
@@ -1046,6 +1049,85 @@ apply_idle_screen() {
   set_setting secure screensaver_enabled 1
 }
 
+# The Artwork Folder: where the Launcher reads the owner's pictures, its
+# getExternalFilesDir("artwork").
+ARTWORK_FOLDER="/sdcard/Android/data/$LAUNCHER_PACKAGE/files/artwork"
+
+# The owner's pictures folder on the Mac, given with apply --pictures.
+PICTURES=""
+
+# is_picture NAME: whether NAME is a JPEG or PNG picture by its extension, as the Launcher picks them.
+is_picture() {
+  case "$1" in
+    *.[jJ][pP][gG] | *.[jJ][pP][eE][gG] | *.[pP][nN][gG]) return 0 ;;
+  esac
+  return 1
+}
+
+# artwork_folder_ready: whether the Artwork Folder is on the TV. Only the Launcher can make it (adb
+# is refused a folder in an app's own storage), and it does when it starts, so it is started once
+# when the folder is missing.
+artwork_folder_ready() {
+  local check=1
+  adb_call shell ls "$ARTWORK_FOLDER" > /dev/null 2>&1 && return 0
+  say "  Starting the Launcher once, so it makes its Artwork Folder."
+  adb_call shell am start -W -n "$LAUNCHER_HOME" > /dev/null 2>&1
+  until adb_call shell ls "$ARTWORK_FOLDER" > /dev/null 2>&1; do
+    [ "$check" -ge "$FOCUS_CHECKS" ] && return 1
+    check=$((check + 1))
+    sleep 1
+  done
+}
+
+# Artwork: the JPEG and PNG pictures in the owner's folder (not in its subfolders) are copied to
+# the Artwork Folder and read back; anything else is skipped and reported. Hidden files, such as
+# the Finder's .DS_Store, are not the owner's pictures and are left out silently.
+apply_artwork() {
+  local path name pictures="" output status on_tv
+  say "Artwork"
+  for path in "$PICTURES"/*; do
+    [ -e "$path" ] || continue
+    name=${path##*/}
+    if [ -d "$path" ]; then
+      outcome skipped "$name (a folder)"
+    elif is_picture "$name"; then
+      pictures="$pictures$name
+"
+    else
+      outcome skipped "$name (not a JPEG or PNG picture)"
+    fi
+  done
+  if [ -z "$pictures" ]; then
+    outcome "not done" "Artwork: no JPEG or PNG pictures in $PICTURES"
+    return 0
+  elif [ -z "$LAUNCHER_READY" ]; then
+    outcome "not done" "Artwork: the Launcher is not on the TV"
+    return 0
+  elif [ -z "$DRY_RUN" ] && ! artwork_folder_ready; then
+    outcome failed "Artwork: the Launcher did not make its Artwork Folder ($ARTWORK_FOLDER)"
+    return 0
+  fi
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if [ -n "$DRY_RUN" ]; then
+      outcome "would copy" "$name"
+      continue
+    fi
+    output=$(adb_call push --sync "$PICTURES/$name" "$ARTWORK_FOLDER/" 2>&1)
+    status=$?
+    on_tv=$(adb_call shell ls "$ARTWORK_FOLDER" 2> /dev/null)
+    if [ "$status" -ne 0 ] || ! contains "$on_tv" "$name"; then
+      outcome failed "$name (not in the Artwork Folder after adb push: $(printf '%s\n' "$output" | tail -n 1))"
+    elif contains "$output" "$PICTURES/$name: 0 files pushed, 1 skipped."; then
+      outcome unchanged "$name already in the Artwork Folder"
+    else
+      outcome copied "$name"
+    fi
+  done <<EOF
+$pictures
+EOF
+}
+
 # --- Check Step and Casting Fallback --------------------------------------------------------
 
 # Set by apply_home_takeover when the Check Step should follow it.
@@ -1173,12 +1255,21 @@ cmd_apply() {
         LAUNCHER_APK=$2
         shift
         ;;
+      --pictures)
+        [ $# -ge 2 ] || { usage >&2; exit 2; }
+        PICTURES=${2%/}
+        shift
+        ;;
       *) usage >&2; exit 2 ;;
     esac
     shift
   done
   if [ -n "$LAUNCHER_APK" ] && [ ! -f "$LAUNCHER_APK" ]; then
     say "No Launcher APK at $LAUNCHER_APK." >&2
+    exit 2
+  fi
+  if [ -n "$PICTURES" ] && [ ! -d "$PICTURES" ]; then
+    say "No pictures folder at $PICTURES." >&2
     exit 2
   fi
   load_lists
@@ -1203,6 +1294,10 @@ cmd_apply() {
   say
   apply_idle_screen
   say
+  if [ -n "$PICTURES" ]; then
+    apply_artwork
+    say
+  fi
   if [ -n "$CHECKS_DUE" ]; then
     apply_check_step
     say
