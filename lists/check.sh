@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Checks the package lists. Run from the repo root: lists/check.sh [lists-dir]
 # Exits 0 and prints "lists OK" when every rule holds, or prints each problem and exits 1.
 # Works on macOS /bin/bash 3.2.
@@ -13,20 +13,32 @@ problem() {
   problems=$((problems + 1))
 }
 
+# Whether a line is skipped: a comment, or blank (only spaces and tabs), as script/fuego skips it.
+skipped_line() {
+  case $1 in
+    '#'*) return 0 ;;
+    *[![:space:]]*) return 1 ;;
+  esac
+  return 0
+}
+
 # Prints the package IDs in a list file, one per line, skipping comments and blank lines.
 ids() {
-  while IFS='|' read -r pkg _; do
-    case $pkg in '' | '#'*) continue ;; esac
-    echo "$pkg"
+  while IFS= read -r line; do
+    skipped_line "$line" && continue
+    echo "${line%%|*}"
   done <"$dir/$1"
 }
 
 # Checks every entry in a list file has the form package|confirmed_on_tv|reason.
 check_entries() {
   n=0
-  while IFS='|' read -r pkg confirmed reason; do
+  while IFS= read -r line; do
     n=$((n + 1))
-    case $pkg in '' | '#'*) continue ;; esac
+    skipped_line "$line" && continue
+    IFS='|' read -r pkg confirmed reason <<EOF
+$line
+EOF
     if ! printf '%s\n' "$pkg" | grep -Eq '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$'; then
       problem "$1:$n: \"$pkg\" is not a package name"
     fi
@@ -73,6 +85,10 @@ done
 
 for pkg in $(on_both takeover.txt known-bloat.txt); do
   problem "$pkg is a Takeover Package and must not be on the Known-Bloat List"
+done
+
+for pkg in $(on_both takeover.txt must-keep.txt); do
+  problem "$pkg is a Takeover Package and must not be on the Must-Keep List"
 done
 
 if [ "$problems" -gt 0 ]; then

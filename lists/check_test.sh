@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Tests for lists/check.sh, from the outside: a lists directory in, exit code and report out.
 # Run from the repo root: lists/check_test.sh
 # Works on macOS /bin/bash 3.2.
@@ -91,6 +91,14 @@ run_check "a confirmed-on-TV marker other than true or false fails" "$d" 1 "know
 d=$(fresh padded-id)
 echo 'com.example.padded |false|A space before the separator' >>"$d/known-bloat.txt"
 run_check "a package ID that is not a plain package name fails" "$d" 1 "known-bloat.txt:3"
+
+d=$(fresh blank-with-spaces)
+printf '  \t\n' >>"$d/known-bloat.txt"
+run_check "a line of only spaces and tabs is skipped, as the script skips it" "$d" 0 "lists OK"
+
+d=$(fresh takeover-and-must-keep)
+echo 'com.example.launcher|false|Wrongly listed as Must-Keep' >>"$d/must-keep.txt"
+run_check "a Takeover Package on Must-Keep fails" "$d" 1 "com.example.launcher is a Takeover Package and must not be on the Must-Keep List"
 
 d=$(fresh missing-list)
 rm "$d/takeover.txt"

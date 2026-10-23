@@ -82,20 +82,32 @@ run_fuego_answering() {
 # with_list_entry FILE LINE: runs the script from a copy of the repo whose lists/FILE also has
 # LINE, for list mistakes lists/check.sh would refuse (a package on two lists).
 with_list_entry() {
-  if [ "$FUEGO" = "$REPO/script/fuego" ]; then
-    mkdir -p "$TEST_DIR/repo/script"
-    cp "$REPO/script/fuego" "$TEST_DIR/repo/script/fuego"
-    cp -R "$REPO/lists" "$TEST_DIR/repo/lists"
-    FUEGO="$TEST_DIR/repo/script/fuego"
-  fi
+  repo_copy
   printf '%s\n' "$2" >> "$TEST_DIR/repo/lists/$1"
 }
 
-# launcher_apk: writes a fake Launcher APK (the fake TV reads its "package=", "home=" and
-# "folder=" lines: the Launcher makes its Artwork Folder when it starts) and prints its path.
+# with_list FILE LINES: runs the script from a copy of the repo whose lists/FILE holds only LINES.
+with_list() {
+  repo_copy
+  printf '%s\n' "$2" > "$TEST_DIR/repo/lists/$1"
+}
+
+# repo_copy: from now on, runs the script from a copy of the repo, whose lists a test may change.
+repo_copy() {
+  [ "$FUEGO" = "$REPO/script/fuego" ] || return 0
+  mkdir -p "$TEST_DIR/repo/script"
+  cp "$REPO/script/fuego" "$TEST_DIR/repo/script/fuego"
+  cp -R "$REPO/lists" "$TEST_DIR/repo/lists"
+  FUEGO="$TEST_DIR/repo/script/fuego"
+}
+
+# launcher_apk [VERSION_NAME VERSION_CODE [KEY]]: writes a fake Launcher APK and prints its path.
+# The fake TV reads its "package=", "home=", "folder=" (the Launcher makes its Artwork Folder when
+# it starts), "version=" and "key=" lines. The version defaults to 0.0.0 (versionCode 1) and the
+# signing key to "release".
 launcher_apk() {
-  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\nfolder=files/artwork\n' \
-    > "$TEST_DIR/launcher.apk"
+  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\nfolder=files/artwork\nversion=%s %s\nkey=%s\n' \
+    "${1:-0.0.0}" "${2:-1}" "${3:-release}" > "$TEST_DIR/launcher.apk"
   echo "$TEST_DIR/launcher.apk"
 }
 
@@ -268,9 +280,15 @@ fake_tv_storage() {
   printf '%s %s %s\n' "$1" "$2" "$3" > "$FAKE_TV/storage"
 }
 
-# fake_tv_home_draw_ms MS: how long a cold start of Home takes to draw.
+# fake_tv_home_draw_ms MS: how long Home takes to draw when it is started or reopened.
 fake_tv_home_draw_ms() {
   printf '%s\n' "$1" > "$FAKE_TV/home-draw-ms"
+}
+
+# fake_tv_settings_full_screen: Settings opens full screen, covering Home, rather than as the
+# panel over Home that Android TV's Settings is.
+fake_tv_settings_full_screen() {
+  : > "$FAKE_TV/settings-full-screen"
 }
 
 # fake_tv_process PACKAGE PSS_KB: the package is running and uses PSS_KB of memory.
@@ -336,12 +354,14 @@ fake_github_new() {
   : > "$FAKE_GITHUB/calls"
 }
 
-# fake_github_release TAG: publishes release TAG as the latest, with the fake Launcher APK and a
-# SHA256SUMS listing its checksum, named as the release workflow names them.
+# fake_github_release TAG [VERSION_CODE [KEY]]: publishes release TAG (vX.Y.Z) as the latest, with
+# the fake Launcher APK and a SHA256SUMS listing its checksum, named as the release workflow names
+# them. The APK's versionName is TAG without its "v", as the release workflow requires; its
+# versionCode defaults to 1 and its signing key to "release".
 fake_github_release() {
   local dir="$FAKE_GITHUB/releases/$1"
   mkdir -p "$dir"
-  cp "$(launcher_apk)" "$dir/fuego-os-launcher-$1.apk"
+  cp "$(launcher_apk "${1#v}" "${2:-1}" "${3:-release}")" "$dir/fuego-os-launcher-$1.apk"
   (cd "$dir" && shasum -a 256 "fuego-os-launcher-$1.apk") > "$dir/SHA256SUMS"
   printf '%s\n' "$1" > "$FAKE_GITHUB/latest"
 }

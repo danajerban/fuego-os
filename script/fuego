@@ -17,9 +17,10 @@ SETUP_DOC="https://github.com/danajerban/fuego-os/blob/main/docs/tv-setup.md"
 # The Launcher's app ID.
 LAUNCHER_PACKAGE=io.github.danajerban.fuegoos
 
-# The Android platform the Launcher builds against. Keep in step with the Launcher's compileSdk.
+# The Android platform the Launcher builds against, and the build tools its Android Gradle Plugin
+# needs. Keep in step with the Launcher's compileSdk and with CI.
 LAUNCHER_SDK_PLATFORM=android-34
-LAUNCHER_BUILD_TOOLS=34.0.0
+LAUNCHER_BUILD_TOOLS=36.0.0
 
 usage() {
   cat <<EOF
@@ -34,7 +35,8 @@ Commands:
                            Wireless debugging screen
   probe                    report the TV's chip, RAM, storage, Android build, every package
                            with the lists it is on, and its available memory, Launcher memory
-                           and Home draw time. Changes nothing (Home is restarted to time it)
+                           and Home Draw Time (Settings is opened, then Home reopened and timed).
+                           Changes nothing
   apply [--dry-run] [--skip-checks] [--launcher APK] [--pictures FOLDER]
                            save the Snapshot (first run only), disable the Known-Bloat List,
                            set animation scales to 0.5, install the Launcher, make it what Home
@@ -42,7 +44,8 @@ Commands:
                            of Google's ambient mode, ask you to check casting, HDMI inputs, Wi-Fi
                            and the remote's buttons, and measure before and after. If casting is
                            broken, the setup wizard alone is turned back on. Safe to run again:
-                           it redoes the Home Takeover if a TV update undid it.
+                           it updates the Launcher when the latest release is newer, and redoes
+                           the Home Takeover if a TV update undid it.
                            --dry-run: list what would change and write nothing
                            --skip-checks: leave the checks for the next apply
                            --launcher APK: install this APK instead of the one from the latest
@@ -127,7 +130,8 @@ cmd_check() {
 
   if [ -n "$build" ]; then
     sdk=$(sdk_dir)
-    if [ -n "$sdk" ] && [ -d "$sdk/platforms/$LAUNCHER_SDK_PLATFORM" ]; then
+    if [ -n "$sdk" ] && [ -d "$sdk/platforms/$LAUNCHER_SDK_PLATFORM" ] &&
+      [ -d "$sdk/build-tools/$LAUNCHER_BUILD_TOOLS" ]; then
       say "Android SDK: found ($sdk)"
     else
       say "Android SDK: missing (needed only to build the Launcher yourself)"
@@ -302,7 +306,8 @@ listed() {
 }
 
 # load_lists: reads the four package lists into KEEP_LIST, MUST_KEEP_LIST, KNOWN_BLOAT_LIST and
-# TAKEOVER_PACKAGES, one package ID per line.
+# TAKEOVER_PACKAGES, one package ID per line, and SETUP_WIZARD, the Takeover Package casting can
+# depend on: the first one on its list (lists/README.md).
 load_lists() {
   local file
   for file in keep.txt must-keep.txt known-bloat.txt takeover.txt; do
@@ -312,6 +317,7 @@ load_lists() {
   MUST_KEEP_LIST=$(listed must-keep.txt)
   KNOWN_BLOAT_LIST=$(listed known-bloat.txt)
   TAKEOVER_PACKAGES=$(listed takeover.txt)
+  SETUP_WIZARD=$(printf '%s\n' "$TAKEOVER_PACKAGES" | head -n 1)
 }
 
 # contains LINES WORD: whether WORD is one of the newline-separated LINES.
@@ -326,7 +332,7 @@ $2
   return 1
 }
 
-# --- Probe -------------------------------------------------------------------------------
+# --- Packages on the TV ------------------------------------------------------------------
 
 # tv_packages [FLAGS]: the installed packages (pm list packages FLAGS), sorted.
 tv_packages() {
@@ -415,29 +421,57 @@ launcher_memory() {
 
 # print_measurements: the baseline numbers, one indented line each. probe prints them; apply
 # prints them before and after its changes.
-# Available memory is the kernel's MemAvailable. Launcher memory is measured before Home is
-# timed, which restarts Home. Home draw time is the activity manager's TotalTime for a cold start
-# of the Home activity (am start -W -S), so runs compare like for like.
+# Available memory is the kernel's MemAvailable. Launcher memory is the Launcher's PSS. Home Draw
+# Time is the activity manager's TotalTime for Home reopened after Settings was opened over it,
+# as when the owner presses Home: no app is stopped, and nothing is written.
 print_measurements() {
-  local home timing total
+  local home
   say "  Available memory:  $(($(meminfo_kb MemAvailable) / 1024)) MB"
   say "  Launcher memory:   $(launcher_memory)"
   if ! home=$(home_activity); then
-    say "  Home draw time:    not measured (no app answers the Home button)"
+    say "  Home Draw Time:    not measured (no app answers the Home button)"
     return 0
   fi
-  # The chooser belongs to the system ("android"), which must never be stopped.
+  # The chooser belongs to the system ("android"), and is not a Home to time.
   if [ "${home%%/*}" = android ]; then
-    say "  Home draw time:    not measured (the TV asks which app to use as Home)"
+    say "  Home Draw Time:    not measured (the TV asks which app to use as Home)"
     return 0
   fi
-  timing=$(adb_call shell am start -W -S -n "$home")
-  total=$(printf '%s\n' "$timing" | sed -n 's/^TotalTime: \([0-9]*\)$/\1/p')
-  if [ -n "$total" ]; then
-    say "  Home draw time:    $total ms (cold start of $home)"
-  else
-    say "  Home draw time:    not measured ($(printf '%s\n' "$timing" | tail -n 1))"
+  say "  Home Draw Time:    $(home_draw_time "$home")"
+}
+
+# home_draw_time HOME: opens Settings, then reopens HOME and prints how long it took to draw, with
+# its launch state and budget (200 ms warm, 800 ms cold), or why it was not measured.
+home_draw_time() {
+  local home=$1 timing error state total budget=200
+  timing=$(adb_call shell am start -W -a android.settings.SETTINGS | tr -d '\r')
+  error=$(printf '%s\n' "$timing" | grep -m 1 '^Error')
+  if [ -n "$error" ]; then
+    echo "not measured (couldn't open Settings to leave Home: $error)"
+    return 0
   fi
+  timing=$(adb_call shell am start -W -n "$home" | tr -d '\r')
+  state=$(printf '%s\n' "$timing" | sed -n 's/^LaunchState: \([A-Z]*\)$/\1/p')
+  total=$(printf '%s\n' "$timing" | sed -n 's/^TotalTime: \([0-9]*\)$/\1/p')
+  case "$state" in
+    COLD) budget=800 ;;
+    HOT | WARM) ;;
+    *)
+      # Android TV's Settings is a panel over Home: Home was never hidden, so nothing was redrawn.
+      if [ -n "$(printf '%s\n' "$timing" | sed -n '/^LaunchState: UNKNOWN/p')" ]; then
+        echo "not measured (Home stayed drawn behind Settings, so there was no redraw to time)"
+      else
+        echo "not measured ($(printf '%s\n' "$timing" | tail -n 1))"
+      fi
+      return 0
+      ;;
+  esac
+  if [ -z "$total" ]; then
+    echo "not measured (no TotalTime for $home)"
+    return 0
+  fi
+  state=$(printf '%s' "$state" | tr '[:upper:]' '[:lower:]')
+  echo "$total ms ($home reopened from Settings, a $state start; budget $budget ms)"
 }
 
 cmd_probe() {
@@ -464,18 +498,25 @@ SKIPPED_COUNT=0
 CHANGED_COUNT=0
 FAILED_COUNT=0
 
-# outcome KIND TEXT: one report line, counted for the summary. KIND is one of: disabled,
-# "already off", skipped, changed, installed, uninstalled, unchanged, failed, checked (a check
-# that passed), recorded (an owner's answer), "not done" (a step left out), or "would ..." in a
-# dry run.
+# outcome KIND TEXT: one report line, counted for the summary. The kinds, by how they count:
+#   disabled:     disabled, "would disable"
+#   already off:  "already off"
+#   skipped:      skipped (a listed package left alone, or a file that is not a picture)
+#   failed:       failed
+#   changed:      enabled, changed, installed, uninstalled, copied, and in a dry run
+#                 "would enable", "would set", "would install", "would copy"
+#   not counted:  unchanged, checked (a check that passed), recorded (an owner's answer),
+#                 "not done" (a step left out), and in a dry run "would ask", "would check"
 outcome() {
   case "$1" in
     disabled | "would disable") DISABLED_COUNT=$((DISABLED_COUNT + 1)) ;;
     "already off") ALREADY_COUNT=$((ALREADY_COUNT + 1)) ;;
     skipped) SKIPPED_COUNT=$((SKIPPED_COUNT + 1)) ;;
     failed) FAILED_COUNT=$((FAILED_COUNT + 1)) ;;
+    enabled | changed | installed | uninstalled | copied | "would enable" | "would set" | \
+      "would install" | "would copy") CHANGED_COUNT=$((CHANGED_COUNT + 1)) ;;
     unchanged | checked | recorded | "not done" | "would ask" | "would check") ;;
-    *) CHANGED_COUNT=$((CHANGED_COUNT + 1)) ;;
+    *) die "fuego: unknown outcome kind \"$1\" (a bug in fuego)" ;;
   esac
   printf '  %-12s %s\n' "$1" "$2"
 }
@@ -615,8 +656,8 @@ snapshot_fields() {
 }
 
 # Beside the Snapshot, a full copy of each settings namespace as `settings list` prints it
-# (KEY=VALUE lines), so restore can read the original value of any setting, named in the
-# Snapshot's fields or not. Written with the Snapshot, under the same rules.
+# (KEY=VALUE lines): a record of every original setting for the owner to consult. restore reads
+# only the Snapshot's own fields, not these copies. Written with the Snapshot, under the same rules.
 SETTINGS_NAMESPACES="global secure system"
 
 # snapshot_settings_file NAMESPACE: where that namespace's copy is kept.
@@ -700,7 +741,7 @@ ANIMATION_SCALES="window_animation_scale transition_animation_scale animator_dur
 
 apply_speed_settings() {
   local key
-  say "Speed settings"
+  say "Speed Settings"
   for key in $ANIMATION_SCALES; do
     set_setting global "$key" 0.5
   done
@@ -717,9 +758,6 @@ GITHUB_REPO=danajerban/fuego-os
 LATEST_RELEASE_API="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
 RELEASE_DOWNLOADS="https://github.com/$GITHUB_REPO/releases/download"
 RELEASES_PAGE="https://github.com/$GITHUB_REPO/releases"
-
-# The setup wizard, the Takeover Package casting can depend on (lists/takeover.txt).
-SETUP_WIZARD=com.google.android.tungsten.setupwraith
 
 # The APK given with apply --launcher, or the one launcher_apk downloaded, and how the report
 # names where it came from.
@@ -745,12 +783,10 @@ latest_release_tag() {
 }
 
 # launcher_apk: the one place that decides where the Launcher APK apply installs comes from: the
-# file given with --launcher, or else the latest release's APK, downloaded to a folder removed
-# when the script exits and checked against the release's SHA256SUMS. A dry run only looks up the
-# release. Sets LAUNCHER_APK and LAUNCHER_FROM. Prints the outcome and fails when there is no APK
-# to install.
+# file given with --launcher, or else the latest release's APK (release_apk). Sets LAUNCHER_APK and
+# LAUNCHER_FROM. Prints the outcome and fails when there is no APK to install.
 launcher_apk() {
-  local tag apk error want got
+  local tag
   if [ -n "$LAUNCHER_APK" ]; then
     LAUNCHER_FROM=$LAUNCHER_APK
     return 0
@@ -759,6 +795,14 @@ launcher_apk() {
     outcome "not done" "Launcher: not on the TV, and no release to install it from at $RELEASES_PAGE ($tag). Give an APK instead: fuego apply --launcher APK"
     return 1
   fi
+  release_apk "$tag"
+}
+
+# release_apk TAG: downloads release TAG's Launcher APK to a folder removed when the script exits,
+# and checks it against the release's SHA256SUMS. A dry run only names the release. Sets
+# LAUNCHER_APK and LAUNCHER_FROM. Prints the outcome and fails when there is no APK to install.
+release_apk() {
+  local tag=$1 apk error want got
   apk="fuego-os-launcher-$tag.apk"
   LAUNCHER_FROM="release $tag"
   [ -z "$DRY_RUN" ] || return 0
@@ -786,17 +830,53 @@ launcher_apk() {
   LAUNCHER_APK="$LAUNCHER_DOWNLOADS/$apk"
 }
 
+# launcher_version: the installed Launcher's versionName, as `dumpsys package` reports it; empty
+# when there is none.
+launcher_version() {
+  adb_call shell dumpsys package "$LAUNCHER_PACKAGE" | tr -d '\r' |
+    sed -n 's/^ *versionName=//p' | head -n 1
+}
+
+# compare_versions A B: prints newer, same or older: how version A (X.Y.Z) compares with B, field
+# by field as numbers. Fails when either is not X.Y.Z.
+compare_versions() {
+  local a b x y
+  for x in "$1" "$2"; do
+    case "$x" in
+      *[!0-9.]* | .* | *. | *..*) return 1 ;;
+      *.*.*.*) return 1 ;;
+      *.*.*) ;;
+      *) return 1 ;;
+    esac
+  done
+  a=$1
+  b=$2
+  while [ -n "$a" ]; do
+    x=$((10#${a%%.*}))
+    y=$((10#${b%%.*}))
+    if [ "$x" -gt "$y" ]; then
+      echo newer
+      return 0
+    elif [ "$x" -lt "$y" ]; then
+      echo older
+      return 0
+    fi
+    case "$a" in *.*) a=${a#*.} b=${b#*.} ;; *) a="" ;; esac
+  done
+  echo same
+}
+
 # Set by apply_launcher once the Launcher is on the TV (or would be, in a dry run).
 LAUNCHER_READY=""
 
 # Installs the Launcher, a step of its own before the Home Takeover touches the Stock Launcher.
-# The install is read back: adb reports Success and the TV lists the Launcher as enabled.
+# With the Launcher already on the TV and no APK given, it is updated to the latest release when
+# that is newer, and otherwise left as it is.
 apply_launcher() {
-  local output error
   say "Launcher"
   if [ -z "$LAUNCHER_APK" ] && [ "$(package_state "$LAUNCHER_PACKAGE")" != missing ]; then
-    outcome unchanged "$LAUNCHER_PACKAGE already installed"
     LAUNCHER_READY=1
+    update_launcher
     return 0
   fi
   launcher_apk || return 0
@@ -805,15 +885,65 @@ apply_launcher() {
     LAUNCHER_READY=1
     return 0
   fi
-  output=$(adb_call install -r "$LAUNCHER_APK" 2>&1)
-  if [ "$(printf '%s\n' "$output" | tail -n 1 | tr -d '\r')" = Success ] &&
-    [ "$(package_state "$LAUNCHER_PACKAGE")" = enabled ]; then
-    outcome installed "$LAUNCHER_PACKAGE from $LAUNCHER_FROM"
-    LAUNCHER_READY=1
-  else
-    error=$(printf '%s\n' "$output" | grep -m 1 -e '^adb: ' -e 'Failure')
-    outcome failed "$LAUNCHER_PACKAGE (not installed from $LAUNCHER_FROM${error:+: $error})"
+  install_launcher "from $LAUNCHER_FROM" && LAUNCHER_READY=1
+}
+
+# update_launcher: installs the latest release over the Launcher on the TV when the release's tag
+# (v + versionName) is a higher X.Y.Z than the TV's versionName. A failure leaves the installed
+# Launcher in place.
+update_launcher() {
+  local installed tag order
+  installed=$(launcher_version)
+  if ! tag=$(latest_release_tag); then
+    outcome unchanged "$LAUNCHER_PACKAGE ${installed:+$installed }installed; couldn't check for a newer release ($tag)"
+    return 0
   fi
+  if ! order=$(compare_versions "${tag#v}" "$installed"); then
+    outcome unchanged "$LAUNCHER_PACKAGE ${installed:-(no version)} installed; can't compare it with release $tag, so it is left as it is"
+    return 0
+  fi
+  case "$order" in
+    same)
+      outcome unchanged "$LAUNCHER_PACKAGE $installed already the latest release ($tag)"
+      ;;
+    older)
+      outcome unchanged "$LAUNCHER_PACKAGE $installed is newer than the latest release ($tag), so it is left as it is"
+      ;;
+    newer)
+      release_apk "$tag" || return 0
+      if [ -n "$DRY_RUN" ]; then
+        outcome "would install" "$LAUNCHER_PACKAGE $installed -> ${tag#v} from release $tag"
+      else
+        install_launcher "$installed -> ${tag#v} from release $tag" "${tag#v}"
+      fi
+      ;;
+  esac
+}
+
+# install_launcher DESCRIPTION [VERSION]: installs LAUNCHER_APK with adb install -r and reads it
+# back: adb reports Success and the TV lists the Launcher as enabled (at VERSION, for an update).
+# Prints the outcome, naming the install by DESCRIPTION; fails when it did not take.
+install_launcher() {
+  local description=$1 version=${2-} output error
+  output=$(adb_call install -r "$LAUNCHER_APK" 2>&1)
+  if [ "$(printf '%s\n' "$output" | sed '/^$/d' | tail -n 1 | tr -d '\r')" = Success ] &&
+    [ "$(package_state "$LAUNCHER_PACKAGE")" = enabled ] &&
+    { [ -z "$version" ] || [ "$(launcher_version)" = "$version" ]; }; then
+    outcome installed "$LAUNCHER_PACKAGE $description"
+    return 0
+  fi
+  error=$(printf '%s\n' "$output" | grep -m 1 -e '^adb: ' -e 'Failure')
+  if [ -n "$version" ]; then
+    outcome failed "$LAUNCHER_PACKAGE (not updated $description${error:+: $error})"
+  else
+    outcome failed "$LAUNCHER_PACKAGE (not installed $description${error:+: $error})"
+  fi
+  case "$error" in
+    *INSTALL_FAILED_UPDATE_INCOMPATIBLE*)
+      say "  The release is signed with another key than the Launcher on the TV: run fuego restore, then fuego apply (docs/releasing.md)."
+      ;;
+  esac
+  return 1
 }
 
 # home_role_holder: the package the TV keeps as the chosen Home. It is how set-home-activity is
@@ -861,8 +991,8 @@ owner_types_yes() {
   [ "$answer" = yes ]
 }
 
-# owner_says_yes: the Wi-Fi warning, then the owner's answer. Only "yes" goes on.
-owner_says_yes() {
+# owner_accepts_wifi_warning: the Wi-Fi warning, then the owner's answer. Only "yes" goes on.
+owner_accepts_wifi_warning() {
   say "  Disabling the setup wizard can delete the Wi-Fi network saved during the TV's setup. If the"
   say "  TV leaves the network, join it again on the TV in Settings > Network & Internet."
   owner_types_yes "Type yes to disable the Takeover Packages"
@@ -888,6 +1018,9 @@ focused_app() {
 # How many times to look for the Launcher's focus after a Home press, a second apart. A cold start
 # of the Launcher on an API 34 emulator takes more than two seconds.
 FOCUS_CHECKS=10
+
+# How many times to look for the Artwork Folder after starting the Launcher, a second apart.
+ARTWORK_FOLDER_CHECKS=10
 
 # home_press_opens_launcher: presses Home and waits for the Launcher to have focus. Sets FOCUS to
 # what had focus last. Fails when the Launcher never gets it.
@@ -993,8 +1126,10 @@ apply_home_takeover() {
   if [ -n "$on" ]; then
     if [ -n "$DRY_RUN" ]; then
       outcome "would ask" "the owner's yes to the Wi-Fi warning"
-    elif ! owner_says_yes; then
+    elif ! owner_accepts_wifi_warning; then
       outcome "not done" "Home Takeover: no yes from the owner, so the Takeover Packages stay on"
+      # Home goes back to the app it was chosen from, so the TV isn't left half taken over.
+      [ -z "$home_before" ] || set_home "$home_before"
       return 0
     fi
     for pkg in $on; do
@@ -1073,7 +1208,7 @@ artwork_folder_ready() {
   say "  Starting the Launcher once, so it makes its Artwork Folder."
   adb_call shell am start -W -n "$LAUNCHER_HOME" > /dev/null 2>&1
   until adb_call shell ls "$ARTWORK_FOLDER" > /dev/null 2>&1; do
-    [ "$check" -ge "$FOCUS_CHECKS" ] && return 1
+    [ "$check" -ge "$ARTWORK_FOLDER_CHECKS" ] && return 1
     check=$((check + 1))
     sleep 1
   done

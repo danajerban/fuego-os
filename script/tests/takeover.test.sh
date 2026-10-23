@@ -55,10 +55,16 @@ test_takeover_disables_no_takeover_package_without_the_owners_yes() {
     assert_status 0
     assert_output_contains "Disabling the setup wizard can delete the Wi-Fi network"
     assert_output_contains "not done     Home Takeover: no yes from the owner"
-    assert_equals "" "$(fake_tv_writes | grep -e "$STOCK_LAUNCHER" -e "$SETUP_WIZARD")" \
+    assert_equals "" "$(fake_tv_writes | grep -e " pm .*$STOCK_LAUNCHER" -e " pm .*$SETUP_WIZARD")" \
       "Takeover Package writes after the answer '$answer'"
     assert_equals enabled "$(fake_tv_package_state "$SETUP_WIZARD")"
     assert_equals "$STOCK_HOME" "$(fake_tv_home)"
+    # The Home choice made before the question is handed back, and read back.
+    assert_equals "write shell cmd package set-home-activity $LAUNCHER_HOME
+write shell cmd package set-home-activity $STOCK_HOME" \
+      "$(fake_tv_writes | grep set-home-activity)" "Home choices after the answer '$answer'"
+    assert_output_contains "changed      Home activity -> $STOCK_HOME"
+    assert_equals "role $STOCK_LAUNCHER" "$(home_state | grep '^role ')"
   done
 }
 
@@ -75,7 +81,7 @@ test_takeover_uses_a_launcher_already_on_the_tv() {
   fake_tv_home_activity "$LAUNCHER_HOME" 0
   run_fuego_answering yes apply
   assert_status 0
-  assert_output_contains "unchanged    $LAUNCHER already installed"
+  assert_output_contains "unchanged    $LAUNCHER 1.0 installed; couldn't check for a newer release"
   assert_equals "$LAUNCHER_HOME" "$(fake_tv_home)"
 }
 

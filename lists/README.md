@@ -7,7 +7,7 @@ The four package lists the script reads. [GLOSSARY.md](../GLOSSARY.md) defines e
 | `keep.txt` | Keep List | Nothing directly: every entry is also on the Must-Keep List |
 | `must-keep.txt` | Must-Keep List | Never disables it. It wins over every other list |
 | `known-bloat.txt` | Known-Bloat List | Debloat disables these, and only these |
-| `takeover.txt` | Takeover Packages | Only the Home Takeover disables them |
+| `takeover.txt` | Takeover Packages | Only the Home Takeover disables them, in the list's order. The first entry is the setup wizard: it goes off first, and the Casting Fallback re-enables it alone |
 
 A package on none of the lists is reported by `probe`, never disabled.
 
@@ -24,7 +24,7 @@ com.google.android.katniss|false|Voice search (Katniss): the owner does not use 
 - `confirmed_on_tv`: `true` once `probe` output from the TV shows the package, `false` until then.
 - `reason`: one line saying why the package is on this list.
 
-Lines starting with `#` and blank lines are ignored.
+Lines starting with `#` and blank lines (empty, or only spaces and tabs) are ignored.
 
 Every entry starts as `false`: the IDs come from the research notes in `docs/research/` (or, where a comment says so, from general knowledge) and must be confirmed against `probe` output before the first release.
 
@@ -40,7 +40,7 @@ lists/check_test.sh   # tests the check itself
 The check fails when:
 
 - a package is on both the Must-Keep List and the Known-Bloat List,
-- a Takeover Package is on the Known-Bloat List,
+- a Takeover Package is on the Known-Bloat List or the Must-Keep List,
 - a Keep List app is missing from the Must-Keep List,
 - an entry has a malformed package name, a `confirmed_on_tv` other than `true` or `false`, or no reason,
 - a list file is missing.

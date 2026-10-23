@@ -1,11 +1,8 @@
 package io.github.danajerban.fuegoos
 
 import android.graphics.Bitmap
-import android.util.Log
 import android.view.WindowManager
 import android.widget.ImageView
-import java.io.IOException
-import kotlin.concurrent.thread
 
 /**
  * Home's artwork: the next [Artwork] picture on every Home visit, full screen in [view] and frosted on
@@ -13,7 +10,7 @@ import kotlin.concurrent.thread
  * for them; between visits the Launcher holds no artwork at all.
  */
 class HomeArtwork(private val view: ImageView, private val band: GlassBand) {
-    private val artwork = Artwork(view.context)
+    private val artwork = Artwork(view.context, Artwork.Screen.HOME)
 
     /** Counts visits, so a picture decoded for an earlier visit is never shown in a later one. */
     private var visit = 0
@@ -22,17 +19,13 @@ class HomeArtwork(private val view: ImageView, private val band: GlassBand) {
     fun show() {
         val thisVisit = ++visit
         val screen = view.context.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds
-        thread(name = "artwork") {
-            val picture = artwork.next()
-            val (full, frost) = try {
+        artwork.showNext(
+            decode = { picture ->
                 picture.fill(screen.width(), screen.height()) to
                     GlassBand.frosted(picture.thumbnail(GlassBand.FROST_WIDTH * 4, GlassBand.FROST_HEIGHT * 4))
-            } catch (e: IOException) {
-                Log.w(TAG, "Cannot show the artwork ${picture.name}", e)
-                return@thread
-            }
-            view.post { if (thisVisit == visit) fadeIn(full, frost) }
-        }
+            },
+            show = { pictures -> if (pictures != null && thisVisit == visit) fadeIn(pictures.first, pictures.second) },
+        )
     }
 
     /** Lets go of the picture. Call when Home leaves the screen. */
@@ -51,7 +44,6 @@ class HomeArtwork(private val view: ImageView, private val band: GlassBand) {
     }
 
     private companion object {
-        const val TAG = "HomeArtwork"
         const val FADE_MS = 200L
     }
 }
