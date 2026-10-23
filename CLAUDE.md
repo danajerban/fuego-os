@@ -11,7 +11,7 @@ Makes one Fuego 2K Google TV (Android TV OS 14) fast and free of Bloat over ADB,
 
 ## Layout
 
-- `script/fuego`: the Mac script, one file with subcommands. `script/tests/`: the Fake TV (`fake-adb`, its state layout in its header), helpers (`lib.sh`), `*.test.sh`, and the runner `run`.
+- `script/fuego`: the Mac script, one file with subcommands. `script/tests/`: the Fake TV (`fake-adb`, its state layout in its header), the Fake GitHub (`fake-github`), helpers (`lib.sh`), `*.test.sh`, and the runner `run`.
 - `lists/`: the four package lists as data; format and check in [lists/README.md](lists/README.md).
 - `launcher/`: the Gradle project. `app/` is the Launcher; `fakeapp/` builds the Fake Dock Apps its UI tests install.
 - `docs/tv-setup.md`: the owner's Wireless debugging steps; the script's messages link to it.
@@ -20,7 +20,7 @@ Makes one Fuego 2K Google TV (Android TV OS 14) fast and free of Bloat over ADB,
 
 The TV-safety rules are in CONTRIBUTING.md under "Rules that don't bend"; every change that writes to the TV follows them. On top of those:
 
-- Every `adb` call goes through `adb_call` in `script/fuego` (the ADB Boundary, `$FUEGO_ADB`). The test runner fails a test that reaches a real `adb`.
+- Every `adb` call goes through `adb_call` in `script/fuego` (the ADB Boundary, `$FUEGO_ADB`). The test runner fails a test that reaches a real `adb`. Every download goes through `fetch_call` (the Download Boundary, `$FUEGO_FETCH`), and a test that reaches a real `curl` fails too.
 - Shell runs on the Mac's `/bin/bash` 3.2 ([ADR 0007](docs/adr/0007-script-runs-on-bash-3-2.md)): no associative arrays, `mapfile` or `${x,,}`. Every shell file passes `shellcheck`.
 - A new `adb` call the script makes needs the Fake TV taught to answer it exactly as a real TV does, with a test in `script/tests/fake-tv.test.sh`.
 - The Launcher is Kotlin with plain Android Views ([ADR 0005](docs/adr/0005-own-launcher-in-kotlin-and-views.md)). Its merged manifest has no INTERNET permission, no receivers, and no service except the Idle Screen's dream; the Gradle build fails otherwise.
