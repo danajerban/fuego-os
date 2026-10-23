@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Checks the package lists. Run from the repo root: lists/check.sh [lists-dir]
 # Exits 0 and prints "lists OK" when every rule holds, or prints each problem and exits 1.
 # Works on macOS /bin/bash 3.2.

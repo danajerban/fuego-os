@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Tests the Launcher's merged-manifest check from the outside: a copy of launcher/ with a changed
 # manifest in, the Gradle result out. It shows that adding the INTERNET permission, or a service besides
 # the Idle Screen, fails the build that CI runs. Needs JDK 17 and the Android SDK (ANDROID_HOME), like any Launcher build.

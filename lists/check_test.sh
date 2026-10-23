@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Tests for lists/check.sh, from the outside: a lists directory in, exit code and report out.
 # Run from the repo root: lists/check_test.sh
 # Works on macOS /bin/bash 3.2.
