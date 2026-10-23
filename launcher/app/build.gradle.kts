@@ -103,14 +103,19 @@ abstract class CollectFakeAppApks : DefaultTask() {
         files.sync {
             from(apks)
             into(outputDir)
+            // Flat, so each APK is an asset named after its file.
+            eachFile { path = name }
+            includeEmptyDirs = false
         }
     }
 }
 
 val fakeAppApks = tasks.register<CollectFakeAppApks>("collectFakeAppApks") {
+    // A file tree, walked when the task runs. A set of files would be fixed when the configuration
+    // cache is stored, before :fakeapp has built any APK, and so be empty on a clean build.
     apks.from(
         project(":fakeapp").layout.buildDirectory.dir("outputs/apk")
-            .map { dir -> dir.asFileTree.matching { include("*/release/*.apk") }.files },
+            .map { dir -> dir.asFileTree.matching { include("*/release/*.apk") } },
     )
     apks.builtBy(":fakeapp:assembleRelease")
 }
