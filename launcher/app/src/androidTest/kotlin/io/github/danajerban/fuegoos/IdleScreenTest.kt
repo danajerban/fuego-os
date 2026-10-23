@@ -3,6 +3,8 @@ package io.github.danajerban.fuegoos
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -11,6 +13,9 @@ import org.junit.runner.RunWith
 class IdleScreenTest {
     @get:Rule
     val homeTakeover = HomeTakeover()
+
+    @get:Rule
+    val dockApps = DockApps()
 
     @get:Rule
     val ownerPictures = OwnerPictures()
@@ -50,6 +55,22 @@ class IdleScreenTest {
         clock.advance(1_000)
         val next = colours.keys.single { it != first }
         assertEquals("The picture did not change after a minute", next, tv.waitForArtwork(mapOf(next to colours.getValue(next))))
+    }
+
+    @Test
+    fun theFirstKeyPressOnlyWakesTheTv() {
+        dockApps.installOnly(DockApp.NETFLIX)
+        tv.pressHome()
+        tv.waitForApp(LAUNCHER)
+        tv.focusTile("Netflix")
+        screensaver.goIdle()
+
+        tv.pressCenter()
+
+        assertTrue("The key press did not wake the TV", screensaver.waitFor(showing = false))
+        assertNotNull("Home is not back on screen", tv.dock())
+        assertTrue("The key press did more than wake the TV; focus is on ${tv.focusedTile()}", tv.tileKeepsFocus("Netflix"))
+        assertEquals(LAUNCHER, tv.foregroundPackage)
     }
 
     private companion object {
