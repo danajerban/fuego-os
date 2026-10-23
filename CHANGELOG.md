@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Commands work when adb lists the TV twice (its address and the name adb's mDNS finds it under), which made every adb call fail with "more than one device" and showed as "Can't reach the TV". `connect` saves the TV's address beside the Snapshot, and each command talks to one device: `ANDROID_SERIAL` if set, else the saved address if listed, else the only device listed; with several listed and none of them saved, it asks to run `fuego connect` again.
+
 ## [0.1.0] - 2026-10-23
 
 ### Added
