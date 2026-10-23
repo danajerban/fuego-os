@@ -92,6 +92,10 @@ d=$(fresh padded-id)
 echo 'com.example.padded |false|A space before the separator' >>"$d/known-bloat.txt"
 run_check "a package ID that is not a plain package name fails" "$d" 1 "known-bloat.txt:3"
 
+d=$(fresh blank-with-spaces)
+printf '  \t\n' >>"$d/known-bloat.txt"
+run_check "a line of only spaces and tabs is skipped, as the script skips it" "$d" 0 "lists OK"
+
 d=$(fresh missing-list)
 rm "$d/takeover.txt"
 run_check "a missing list file fails" "$d" 1 "takeover.txt"

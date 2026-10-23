@@ -24,7 +24,7 @@ com.google.android.katniss|false|Voice search (Katniss): the owner does not use 
 - `confirmed_on_tv`: `true` once `probe` output from the TV shows the package, `false` until then.
 - `reason`: one line saying why the package is on this list.
 
-Lines starting with `#` and blank lines are ignored.
+Lines starting with `#` and blank lines (empty, or only spaces and tabs) are ignored.
 
 Every entry starts as `false`: the IDs come from the research notes in `docs/research/` (or, where a comment says so, from general knowledge) and must be confirmed against `probe` output before the first release.
 
