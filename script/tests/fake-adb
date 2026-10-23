@@ -259,19 +259,16 @@ dumpsys_window() {
 # am start -W -S -n COMPONENT: stops the app, starts the activity cold and reports its timing.
 # Only the activities that answer the Home intent exist on the fake TV.
 am_start() {
-  local component=""
   [ "$*" = "-W -S -n ${4-}" ] || unsupported
-  component=$4
+  local component=$4 pkg=${4%%/*} class=${4#*/} total
   echo "Starting: Intent { cmp=$component }"
-  if ! grep -qxF "$component" "$tv/home-activities" || ! package_enabled "${component%%/*}"; then
-    local pkg=${component%%/*} class=${component#*/}
+  if ! grep -qxF "$component" "$tv/home-activities" || ! package_enabled "$pkg"; then
     case "$class" in .*) class=$pkg$class ;; esac
     echo "Error type 3"
     echo "Error: Activity class {$pkg/$class} does not exist."
     return 0
   fi
   echo "$component" > "$tv/focus"
-  local total
   total=$(cat "$tv/home-draw-ms")
   echo "Status: ok"
   echo "LaunchState: COLD"

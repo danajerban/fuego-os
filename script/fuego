@@ -25,6 +25,9 @@ Commands:
                            "Pair device with pairing code" screen
   connect ADDRESS          connect to the TV, using the "IP address & Port" from the TV's
                            Wireless debugging screen
+  probe                    report the TV's chip, RAM, storage, Android build, every package
+                           with the lists it is on, and its available memory and Home draw
+                           time. Changes nothing (Home is restarted to time it)
 
 TV setup steps: $SETUP_DOC
 EOF
@@ -134,6 +137,21 @@ wireless_debugging_help() {
   say "That screen shows the IP address & Port to use with: fuego connect IP:PORT"
   say "The port changes each time Wireless debugging is turned on."
   say "Step by step: $SETUP_DOC"
+}
+
+# require_tv: stops, with the way back, unless adb is there and the TV answers.
+# Every command that talks to a connected TV starts with it.
+require_tv() {
+  local output
+  require_adb
+  output=$(adb_call get-state 2>&1)
+  [ "$output" = device ] && return 0
+  {
+    say "Can't reach the TV ($output)."
+    say "Check that the TV is on and on the same network as this Mac, then connect again."
+    wireless_debugging_help
+  } >&2
+  exit 1
 }
 
 cmd_pair() {
@@ -357,6 +375,7 @@ print_measurements() {
 cmd_probe() {
   [ $# -eq 0 ] || { usage >&2; exit 2; }
   load_lists
+  require_tv
   print_facts
   say
   print_packages

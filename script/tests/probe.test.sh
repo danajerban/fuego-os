@@ -77,6 +77,32 @@ test_probe_changes_nothing_on_the_tv_or_the_mac() {
   assert_equals "" "$(find "$HOME" "$TEST_DIR/cwd" "$TMPDIR" -mindepth 1)" "files written on the Mac"
 }
 
+test_probe_when_wireless_debugging_was_turned_off() {
+  fake_tv_fault debugging-off
+  run_fuego probe
+  assert_status 1
+  assert_output_contains "Can't reach the TV (error: no devices/emulators found)."
+  assert_output_contains "Settings > System > Developer options > Wireless debugging"
+  assert_output_contains "docs/tv-setup.md"
+  assert_output_lacks "Packages"
+  assert_equals "read get-state" "$(fake_tv_calls)" "calls to the TV"
+}
+
+test_probe_when_the_tv_left_the_network() {
+  fake_tv_fault offline
+  run_fuego probe
+  assert_status 1
+  assert_output_contains "Can't reach the TV (error: device offline)."
+  assert_output_contains "fuego connect IP:PORT"
+}
+
+test_probe_stops_when_adb_is_missing() {
+  export FUEGO_ADB="$TEST_DIR/nowhere/adb"
+  run_fuego probe
+  assert_status 1
+  assert_output_contains "adb: missing"
+}
+
 test_probe_flags_packages_on_none_of_the_lists() {
   fake_tv_install_package com.fuego.tv.shoppingrows system # as a Fuego update might add
   fake_tv_set_package_state com.fuego.tv.otaupdater disabled-user
