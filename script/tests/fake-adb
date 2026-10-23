@@ -10,6 +10,9 @@
 #   focus                  the focused activity
 #   settings/<ns>/<key>    settings values (ns: global, secure, system)
 #   props/<name>           getprop values
+#   meminfo                "<MemTotal kB> <MemAvailable kB>"
+#   storage                /data as "<1K-blocks> <used> <available>"
+#   home-draw-ms           how long a cold start of Home takes to draw
 #   sdcard/                files under /sdcard (also reachable as /storage/emulated/0)
 #   link/                  pairing and connection: pair-address, pairing-code, address,
 #                          paired (present once paired), connected (connected addresses)
@@ -237,12 +240,42 @@ keyevent() {
   esac
 }
 
+# As on API 34, the focus lines are in the displays section, not in the window list.
+dumpsys_window_windows() {
+  echo "WINDOW MANAGER WINDOWS (dumpsys window windows)"
+  echo "  Window #0 Window{5e1f2a u0 $(cat "$tv/focus")}:"
+}
+
 dumpsys_window() {
   local focus
   focus=$(cat "$tv/focus")
-  echo "WINDOW MANAGER WINDOWS (dumpsys window windows)"
+  echo
+  echo "WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)"
   echo "  mCurrentFocus=Window{5e1f2a u0 $focus}"
   echo "  mFocusedApp=ActivityRecord{8c3d1b u0 $focus t7}"
+  dumpsys_window_windows
+}
+
+# am start -W -S -n COMPONENT: stops the app, starts the activity cold and reports its timing.
+# Only the activities that answer the Home intent exist on the fake TV.
+am_start() {
+  [ "$*" = "-W -S -n ${4-}" ] || unsupported
+  local component=$4 pkg=${4%%/*} class=${4#*/} total
+  echo "Starting: Intent { cmp=$component }"
+  if ! grep -qxF "$component" "$tv/home-activities" || ! package_enabled "$pkg"; then
+    case "$class" in .*) class=$pkg$class ;; esac
+    echo "Error type 3"
+    echo "Error: Activity class {$pkg/$class} does not exist."
+    return 0
+  fi
+  echo "$component" > "$tv/focus"
+  total=$(cat "$tv/home-draw-ms")
+  echo "Status: ok"
+  echo "LaunchState: COLD"
+  echo "Activity: $component"
+  echo "TotalTime: $total"
+  echo "WaitTime: $((total + 8))"
+  echo "Complete"
 }
 
 # --- Settings and properties -------------------------------------------------------------
@@ -262,6 +295,24 @@ settings_delete() {
   else
     echo "Deleted 0 rows"
   fi
+}
+
+# The kernel's memory report, as `cat /proc/meminfo` prints it (first lines only).
+meminfo() {
+  local total available
+  read -r total available < "$tv/meminfo"
+  printf '%-16s%8s kB\n' MemTotal: "$total" MemFree: $((available / 4)) MemAvailable: "$available"
+}
+
+# df -k /data, as toybox prints it: the Used column is as wide as its value.
+df_data() {
+  local total used available width
+  read -r total used available < "$tv/storage"
+  width=${#used}
+  [ "$width" -lt 4 ] && width=4
+  printf '%-16s %9s %*s %9s %4s %s\n' Filesystem 1K-blocks "$width" Used Available Use% "Mounted on"
+  printf '%-16s %9s %*s %9s %4s %s\n' /dev/block/dm-37 "$total" "$width" "$used" "$available" \
+    "$(((used * 100 + used + available - 1) / (used + available)))%" /data/user/0
 }
 
 getprop() {
@@ -373,7 +424,12 @@ case "$*" in
   "shell cmd package resolve-activity"*) log read; need_device; shift 3; resolve_activity "$@" ;;
   "shell cmd package set-home-activity"*) log write; need_device; shift 3; set_home_activity "$@" ;;
   "shell input keyevent"*) log write; need_device; keyevent "${4-}" ;;
-  "shell dumpsys window" | "shell dumpsys window windows") log read; need_device; dumpsys_window ;;
+  "shell dumpsys window") log read; need_device; dumpsys_window ;;
+  "shell dumpsys window windows") log read; need_device; dumpsys_window_windows ;;
+  "shell cat /proc/meminfo") log read; need_device; meminfo ;;
+  "shell df -k /data") log read; need_device; df_data ;;
+  # Starting Home to time it changes no stored state (packages, settings, the Home choice).
+  "shell am start"*) log read; need_device; shift 3; am_start "$@" ;;
   "shell ls"*) log read; need_device; shift 2; ls_path "$@" ;;
   "shell mkdir"*) log write; need_device; shift 2; mkdir_path "$@" ;;
   "install "*) log write; need_device; shift; install "$@" ;;

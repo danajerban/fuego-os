@@ -151,6 +151,10 @@ EOF
   fake_tv_prop ro.product.model "FUEGO 2K SMART TV"
   fake_tv_prop ro.product.device GoogleTV8164
 
+  fake_tv_memory 2025912 880436
+  fake_tv_storage 10167132 565024 9454652
+  fake_tv_home_draw_ms 1432
+
   echo "$FAKE_TV_PAIR_ADDRESS" > "$FAKE_TV/link/pair-address"
   echo "$FAKE_TV_ADDRESS" > "$FAKE_TV/link/address"
   echo "$FAKE_TV_PAIRING_CODE" > "$FAKE_TV/link/pairing-code"
@@ -202,6 +206,21 @@ fake_tv_setting() {
 
 fake_tv_prop() {
   printf '%s\n' "$2" > "$FAKE_TV/props/$1"
+}
+
+# fake_tv_memory TOTAL_KB AVAILABLE_KB: the RAM and the memory available, as the kernel reports.
+fake_tv_memory() {
+  printf '%s %s\n' "$1" "$2" > "$FAKE_TV/meminfo"
+}
+
+# fake_tv_storage TOTAL_KB USED_KB AVAILABLE_KB: the size of /data.
+fake_tv_storage() {
+  printf '%s %s %s\n' "$1" "$2" "$3" > "$FAKE_TV/storage"
+}
+
+# fake_tv_home_draw_ms MS: how long a cold start of Home takes to draw.
+fake_tv_home_draw_ms() {
+  printf '%s\n' "$1" > "$FAKE_TV/home-draw-ms"
 }
 
 # fake_tv_home: the activity the Home button opens now. fake_tv_focus: the focused activity.
