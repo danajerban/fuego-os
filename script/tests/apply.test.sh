@@ -91,6 +91,24 @@ setting.secure.screensaver_activate_on_dock=null
 launcher=missing" "$(snapshot_fields)" "Snapshot"
 }
 
+test_apply_saves_every_setting_alongside_the_snapshot_once() {
+  fake_tv_setting system screen_off_timeout 600000
+  run_fuego apply
+  assert_status 0
+  local dir
+  dir=$(dirname "$(snapshot_file)")
+  assert_equals "screensaver_components=com.google.android.apps.tv.dreamx/.service.Backdrop
+screensaver_enabled=1" "$(cat "$dir/snapshot-settings-secure")" "secure settings"
+  assert_equals "transition_animation_scale=1.0
+window_animation_scale=1.0" "$(cat "$dir/snapshot-settings-global")" "global settings"
+  assert_equals "screen_off_timeout=600000" "$(cat "$dir/snapshot-settings-system")" "system settings"
+  cp -R "$dir" "$TEST_DIR/first"
+  fake_tv_setting secure screensaver_enabled 0
+  run_fuego apply
+  assert_status 0
+  diff -r "$TEST_DIR/first" "$dir" || fail "the second apply rewrote the Snapshot or its settings"
+}
+
 test_apply_records_disabled_packages_and_an_installed_launcher() {
   fake_tv_set_package_state com.google.android.katniss disabled-user
   fake_tv_install_package io.github.danajerban.fuegoos user

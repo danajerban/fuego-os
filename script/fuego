@@ -583,10 +583,22 @@ snapshot_fields() {
   fi
 }
 
-# take_snapshot: saves the Snapshot unless one exists, before apply changes anything. It is
-# written once and never overwritten, so a later run can't erase the way back. Stops on failure.
+# Beside the Snapshot, a full copy of each settings namespace as `settings list` prints it
+# (KEY=VALUE lines), so restore can read the original value of any setting, named in the
+# Snapshot's fields or not. Written with the Snapshot, under the same rules.
+SETTINGS_NAMESPACES="global secure system"
+
+# snapshot_settings_file NAMESPACE: where that namespace's copy is kept.
+snapshot_settings_file() {
+  printf '%s\n' "$STATE_DIR/snapshot-settings-$1"
+}
+
+# take_snapshot: saves the Snapshot and its settings copies unless the Snapshot exists, before
+# apply changes anything. They are written once and never overwritten, so a later run can't erase
+# the way back. Stops on failure. The Snapshot is moved into place last: once it is there, so are
+# the copies.
 take_snapshot() {
-  local fields
+  local fields ns settings
   if [ -f "$SNAPSHOT" ]; then
     say "Snapshot: kept from the first apply ($SNAPSHOT); it is never overwritten"
     return 0
@@ -596,16 +608,36 @@ take_snapshot() {
     return 0
   fi
   fields=$(snapshot_fields)
-  if ! mkdir -p "$STATE_DIR" 2> /dev/null || ! {
+  mkdir -p "$STATE_DIR" 2> /dev/null || snapshot_failed
+  for ns in $SETTINGS_NAMESPACES; do
+    settings=$(adb_call shell settings list "$ns" 2> /dev/null) || snapshot_failed
+    {
+      [ -z "$settings" ] || printf '%s\n' "$settings" | tr -d '\r'
+    } 2> /dev/null > "$(snapshot_settings_file "$ns").new" || snapshot_failed
+  done
+  {
     say "# fuego-os Snapshot: the TV as it was before apply first changed it."
     say "# Written once and never overwritten. fuego restore puts the TV back to it."
+    say "# Every setting's original value is in the snapshot-settings-* files beside it."
     say "taken=$(date '+%Y-%m-%d %H:%M')"
     printf '%s\n' "$fields"
-  } 2> /dev/null > "$SNAPSHOT.new" || ! mv "$SNAPSHOT.new" "$SNAPSHOT"; then
-    rm -f "$SNAPSHOT.new" 2> /dev/null
-    die "Can't save the Snapshot to $SNAPSHOT, so nothing was changed on the TV."
-  fi
+  } 2> /dev/null > "$SNAPSHOT.new" || snapshot_failed
+  for ns in $SETTINGS_NAMESPACES; do
+    mv "$(snapshot_settings_file "$ns").new" "$(snapshot_settings_file "$ns")" 2> /dev/null ||
+      snapshot_failed
+  done
+  mv "$SNAPSHOT.new" "$SNAPSHOT" 2> /dev/null || snapshot_failed
   say "Snapshot: saved to $SNAPSHOT"
+}
+
+# snapshot_failed: removes what take_snapshot half wrote and stops before any change to the TV.
+snapshot_failed() {
+  local ns
+  rm -f "$SNAPSHOT.new" 2> /dev/null
+  for ns in $SETTINGS_NAMESPACES; do
+    rm -f "$(snapshot_settings_file "$ns").new" 2> /dev/null
+  done
+  die "Can't save the Snapshot to $SNAPSHOT, so nothing was changed on the TV."
 }
 
 # --- Apply steps ---------------------------------------------------------------------------
