@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.window.OnBackInvokedDispatcher
 
 /** The home screen: what Home opens once the Launcher is the TV's Home app. */
 class HomeActivity : Activity() {
@@ -22,6 +23,8 @@ class HomeActivity : Activity() {
                 dock.addView(it)
             }
         }
+        // Back on Home does nothing: there is nowhere further back to go.
+        onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) {}
     }
 
     override fun onResume() {

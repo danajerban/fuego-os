@@ -43,4 +43,17 @@ class HomeScreenTest {
 
         assertEquals(listOf("Netflix", "Spotify", "Settings"), tv.dockLabels())
     }
+
+    @Test
+    fun backOnHomeDoesNothing() {
+        dockApps.installOnly(DockApp.NETFLIX, DockApp.SPOTIFY)
+        tv.pressHome()
+        tv.waitForApp(LAUNCHER)
+        tv.focusTile("Spotify")
+
+        tv.pressBack()
+
+        assertTrue("Back changed the screen; focus is on ${tv.focusedTile()}", tv.tileKeepsFocus("Spotify"))
+        assertEquals(LAUNCHER, tv.foregroundPackage)
+    }
 }

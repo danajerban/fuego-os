@@ -40,6 +40,15 @@ class Tv {
     fun focusedTile(): String? =
         dock()?.children?.firstOrNull { it.isFocused }?.text
 
+    /**
+     * Watches the screen for [timeoutMs] and returns whether the tile labelled [label] kept focus all along.
+     * Leaving Home, or Home being rebuilt, takes focus off it.
+     */
+    fun tileKeepsFocus(label: String, timeoutMs: Long = 2_000): Boolean {
+        val focusedTile = By.res(LAUNCHER, "dock").hasChild(By.text(label).focused(true))
+        return device.wait(Until.gone(focusedTile), timeoutMs) != true
+    }
+
     /** Moves focus right along the Dock until the tile labelled [label] has it. */
     fun focusTile(label: String) {
         repeat(DockApp.entries.size + 2) {
