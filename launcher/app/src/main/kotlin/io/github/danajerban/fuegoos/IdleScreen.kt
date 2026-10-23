@@ -62,7 +62,7 @@ class IdleScreen : DreamService() {
                 Log.w(TAG, "Cannot show the artwork ${picture.name}", e)
                 null
             }
-            shown.post {
+            mainThread.post {
                 if (thisTurn != turn) return@post
                 bitmap?.let(::crossFade)
                 nextChange = clock.schedule(CHANGE_MS) { showNext() }
