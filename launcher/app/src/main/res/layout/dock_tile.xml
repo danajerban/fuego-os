@@ -7,6 +7,7 @@
     android:drawablePadding="@dimen/dock_tile_icon_gap"
     android:focusable="true"
     android:gravity="center"
-    android:paddingVertical="@dimen/dock_tile_padding"
+    android:paddingTop="@dimen/dock_tile_padding_top"
+    android:paddingBottom="@dimen/dock_tile_padding_bottom"
     android:textColor="@android:color/white"
     android:textSize="@dimen/dock_tile_text" />
