@@ -59,6 +59,44 @@ casting-fallback.home-focus=$SETUP_WIZARD/.RecoveryActivity" \
   assert_output_contains "already off, 0 failed;"
 }
 
+test_apply_after_the_casting_fallback_leaves_the_setup_wizard_on_unless_the_owner_says_yes() {
+  local answer
+  run_fuego_answering "$(takeover_and_checks no yes yes yes)" apply --launcher "$(launcher_apk)"
+  assert_status 0
+  cp "$(snapshot_file)" "$TEST_DIR/snapshot-before"
+  cp "$(checks_file)" "$TEST_DIR/checks-before"
+  for answer in "" no yes-please; do
+    : > "$FAKE_TV/calls"
+    run_fuego_answering "$answer" apply
+    assert_status 0
+    assert_output_contains "The Casting Fallback turned the setup wizard back on, because casting broke without it."
+    assert_output_contains "Type yes to disable the setup wizard again, which can break casting again:"
+    assert_output_contains "unchanged    $SETUP_WIZARD left on for casting (the Casting Fallback)"
+    assert_output_lacks "Disabling the setup wizard can delete"
+    assert_output_lacks "Check Step"
+    assert_no_writes
+    assert_equals enabled "$(fake_tv_package_state "$SETUP_WIZARD")"
+  done
+  cmp -s "$TEST_DIR/snapshot-before" "$(snapshot_file)" || fail "the Snapshot was rewritten"
+  cmp -s "$TEST_DIR/checks-before" "$(checks_file)" || fail "the answers changed with no new answers"
+}
+
+test_apply_after_the_casting_fallback_disables_the_setup_wizard_again_after_two_yeses() {
+  run_fuego_answering "$(takeover_and_checks no yes yes yes)" apply --launcher "$(launcher_apk)"
+  assert_status 0
+  : > "$FAKE_TV/calls"
+  run_fuego_answering "$(printf 'yes\nyes')" apply
+  assert_status 0
+  assert_output_contains "Disabling the setup wizard can delete"
+  assert_equals "write shell pm disable-user --user 0 $SETUP_WIZARD
+write shell input keyevent KEYCODE_HOME" "$(fake_tv_writes)" "writes"
+  assert_equals disabled-user "$(fake_tv_package_state "$SETUP_WIZARD")"
+  assert_output_contains "checked      a Home press opens the Launcher"
+  assert_equals undone "$(sed -n 's/^casting-fallback=//p' "$(checks_file)" | tail -n 1)" "the fallback's record"
+  # The Check Step follows the new takeover; this run's input has ended.
+  assert_output_contains "not done     Check Step: no answers"
+}
+
 test_check_step_is_skipped_with_skip_checks() {
   run_fuego_answering "$(takeover_and_checks no no no no)" apply --skip-checks --launcher "$(launcher_apk)"
   assert_status 0

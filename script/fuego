@@ -695,6 +695,9 @@ apply_speed_settings() {
 # The Launcher's Home activity (launcher/app/src/main/AndroidManifest.xml).
 LAUNCHER_HOME="$LAUNCHER_PACKAGE/.HomeActivity"
 
+# The setup wizard, the Takeover Package casting can depend on (lists/takeover.txt).
+SETUP_WIZARD=com.google.android.tungsten.setupwraith
+
 # The APK given with apply --launcher.
 LAUNCHER_APK=""
 
@@ -775,15 +778,27 @@ takeover_packages_on() {
   done
 }
 
-# owner_says_yes: the Wi-Fi warning, then the owner's answer. Only "yes" goes on.
-owner_says_yes() {
+# owner_types_yes PROMPT: asks, and succeeds only when the owner types "yes".
+owner_types_yes() {
   local answer=""
-  say "  Disabling the setup wizard can delete the Wi-Fi network saved during the TV's setup. If the"
-  say "  TV leaves the network, join it again on the TV in Settings > Network & Internet."
-  printf '  Type yes to disable the Takeover Packages: ' >&2
+  printf '  %s: ' "$1" >&2
   read -r answer || true
   [ -t 0 ] || say >&2
   [ "$answer" = yes ]
+}
+
+# owner_says_yes: the Wi-Fi warning, then the owner's answer. Only "yes" goes on.
+owner_says_yes() {
+  say "  Disabling the setup wizard can delete the Wi-Fi network saved during the TV's setup. If the"
+  say "  TV leaves the network, join it again on the TV in Settings > Network & Internet."
+  owner_types_yes "Type yes to disable the Takeover Packages"
+}
+
+# owner_disables_setup_wizard_again: after a Casting Fallback, the setup wizard is disabled again
+# only on the owner's yes to this question (and then to the Wi-Fi warning).
+owner_disables_setup_wizard_again() {
+  say "  The Casting Fallback turned the setup wizard back on, because casting broke without it."
+  owner_types_yes "Type yes to disable the setup wizard again, which can break casting again"
 }
 
 # focused_app: the activity the TV's window manager has focused (mFocusedApp in dumpsys window),
@@ -857,7 +872,7 @@ roll_back_takeover() {
 # the Launcher has focus, rolling back when it doesn't. Every apply checks Home still opens the
 # Launcher and takes over again when a TV update undid it.
 apply_home_takeover() {
-  local home on pkg turned_off="" home_before=""
+  local home on pkg turned_off="" home_before="" wizard_again=""
   say "Home Takeover"
   if [ -z "$LAUNCHER_READY" ]; then
     outcome "not done" "Home Takeover: the Launcher is not on the TV"
@@ -865,6 +880,18 @@ apply_home_takeover() {
   fi
   home=$(home_activity) || home=none
   on=$(takeover_packages_on)
+  # After a Casting Fallback, the setup wizard stays on unless the owner says otherwise.
+  if contains "$on" "$SETUP_WIZARD" && [ "$(checks_value casting-fallback)" = done ]; then
+    if [ -n "$DRY_RUN" ]; then
+      outcome "would ask" "the owner's yes to disable the setup wizard again (the Casting Fallback turned it on)"
+    elif owner_disables_setup_wizard_again; then
+      wizard_again=1
+    else
+      outcome unchanged "$SETUP_WIZARD left on for casting (the Casting Fallback)"
+      on=$(printf '%s\n' "$on" | grep -vxF "$SETUP_WIZARD")
+      [ -n "$on" ] || return 0
+    fi
+  fi
   if [ "${home%%/*}" = "$LAUNCHER_PACKAGE" ] && [ -z "$on" ]; then
     outcome unchanged "Home opens the Launcher ($home)"
     # A Check Step that was skipped or never answered is asked now.
@@ -912,6 +939,7 @@ apply_home_takeover() {
   fi
   tv_still_reachable
   outcome checked "the TV is still on the network"
+  [ -z "$wizard_again" ] || record_checks "casting-fallback=undone"
   CHECKS_DUE=1
 }
 
@@ -1015,9 +1043,6 @@ check.$name=$answer"
     casting_fallback
   fi
 }
-
-# The setup wizard, the Takeover Package casting can depend on (lists/takeover.txt).
-SETUP_WIZARD=com.google.android.tungsten.setupwraith
 
 # The Casting Fallback: casting can need the setup wizard, so it is turned back on alone and read
 # back. The Stock Launcher stays disabled. Home is pressed and what has focus is reported, then the
