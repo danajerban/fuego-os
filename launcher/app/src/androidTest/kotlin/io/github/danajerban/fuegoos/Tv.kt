@@ -71,6 +71,13 @@ class Tv {
     fun tileBounds(label: String): Rect =
         requireNotNull(dock()?.findObject(By.text(label))) { "No $label tile on screen" }.visibleBounds
 
+    /** Where the Dock's glass band is on screen, as far as it is on screen at all. */
+    fun dockBand(): Rect =
+        requireNotNull(device.findObject(By.res(LAUNCHER, "dock_band"))) { "No Dock band on screen" }.visibleBounds
+
+    /** The screen's width in pixels. */
+    fun screenWidth(): Int = device.displayWidth
+
     /** Where the glass focus highlight is drawn on screen, scale included. */
     fun focusGlass(): Rect =
         requireNotNull(device.findObject(By.res(LAUNCHER, "focus_glass"))) { "No glass highlight on screen" }
