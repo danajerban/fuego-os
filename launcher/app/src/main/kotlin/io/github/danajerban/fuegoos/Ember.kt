@@ -1,5 +1,6 @@
 package io.github.danajerban.fuegoos
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -7,7 +8,11 @@ import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RadialGradient
+import android.graphics.RenderNode
 import android.graphics.Shader
+import android.util.AttributeSet
+import android.view.Choreographer
+import android.view.View
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.roundToInt
@@ -115,4 +120,80 @@ object StillEmber : Picture {
 
     override fun thumbnail(width: Int, height: Int): Bitmap =
         Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { Ember(width, height).draw(Canvas(it)) }
+}
+
+/**
+ * Ember moving: the Idle Screen's artwork when the Artwork Folder is empty. The glows drift on slow loops
+ * and breathe, timed by a clock, so nothing on screen ever stands still.
+ *
+ * It redraws about 30 times a second while started, cheaply: Ember is drawn at a quarter of the view's
+ * width and height into a GPU layer that is kept from frame to frame, and the layer is stretched over the
+ * view with filtering. The gradient has no detail that the stretch could lose, so each frame costs four
+ * gradient fills over a sixteenth of the screen and one full-screen copy; no bitmap, no blur.
+ */
+class EmberView(context: Context, attrs: AttributeSet?) : View(context, attrs), Choreographer.FrameCallback {
+    private val frame = RenderNode("ember").apply { setUseCompositingLayer(true, null) }
+    private var ember: Ember? = null
+    private var now: (() -> Long)? = null
+    private var startedAt = 0L
+    private var timeMs = 0L
+    private var lastFrameNanos = 0L
+
+    val isMoving get() = now != null
+
+    /** Starts moving, from Home's still picture, timed by [now] (milliseconds). */
+    fun start(now: () -> Long) {
+        this.now = now
+        startedAt = now()
+        timeMs = 0
+        lastFrameNanos = 0
+        Choreographer.getInstance().postFrameCallback(this)
+        invalidate()
+    }
+
+    /** Stops moving; the picture stays where it is. */
+    fun stop() {
+        now = null
+        Choreographer.getInstance().removeFrameCallback(this)
+    }
+
+    override fun doFrame(frameTimeNanos: Long) {
+        if (now == null) return
+        // Every other frame of a 60 Hz screen: the drift is far too slow to need more.
+        if (frameTimeNanos - lastFrameNanos >= FRAME_NANOS) {
+            lastFrameNanos = frameTimeNanos
+            invalidate()
+        }
+        Choreographer.getInstance().postFrameCallback(this)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        val layerWidth = (w + SHRINK - 1) / SHRINK
+        val layerHeight = (h + SHRINK - 1) / SHRINK
+        frame.setPosition(0, 0, layerWidth, layerHeight)
+        ember = if (w > 0 && h > 0) Ember(layerWidth, layerHeight) else null
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val ember = ember ?: return
+        now?.let { timeMs = it() - startedAt }
+        ember.draw(frame.beginRecording(), timeMs)
+        frame.endRecording()
+        canvas.save()
+        canvas.scale(SHRINK.toFloat(), SHRINK.toFloat())
+        canvas.drawRenderNode(frame)
+        canvas.restore()
+    }
+
+    override fun onDetachedFromWindow() {
+        stop()
+        super.onDetachedFromWindow()
+    }
+
+    private companion object {
+        const val FRAME_NANOS = 30_000_000L
+
+        /** How many times smaller than the view Ember is drawn before it is stretched over it. */
+        const val SHRINK = 4
+    }
 }

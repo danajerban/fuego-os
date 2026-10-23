@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Idle Screen: two artwork layers to cross-fade between, under a half-black veil that dims them to
-     half brightness; see IdleScreen.kt. -->
+<!-- The Idle Screen: the moving Ember gradient and two artwork layers to cross-fade between, under a
+     half-black veil that dims them to half brightness; see IdleScreen.kt. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/idle_screen"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:foreground="@color/idle_screen_veil">
+
+    <io.github.danajerban.fuegoos.EmberView
+        android:id="@+id/ember"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:importantForAccessibility="no" />
 
     <ImageView
         android:id="@+id/artwork_back"

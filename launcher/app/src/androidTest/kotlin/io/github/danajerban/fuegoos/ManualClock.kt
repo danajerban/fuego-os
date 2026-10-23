@@ -21,6 +21,8 @@ class ManualClock : ExternalResource(), Clock {
         IdleScreen.clock = clockBefore
     }
 
+    override fun now() = now
+
     override fun schedule(delayMs: Long, action: Runnable): AutoCloseable {
         val entry = now + delayMs to action
         pending += entry
