@@ -2,6 +2,22 @@
 
 Each run of `launcher/measure_budgets.sh`, newest first. The budgets: the Dock drawn within 200 ms of Home when warm and 800 ms cold, and at most 40 MB of memory. How to run it is in [CONTRIBUTING.md](../CONTRIBUTING.md) under "Testing".
 
+## 2026-10-23: tv34 emulator, the clock and six tiles that fit
+
+- **Device:** the `tv34` AVD as below, started the same way, at its own 1920x1080 and density 320, on the same Mac shared with other work.
+- **Build:** the release build (`assembleRelease`, shrunk) of commit `2c040dc`, signed with the debug key to install it. The Artwork Folder was empty, so Home showed Ember. YouTube and the Fake Dock Apps for Netflix, Stremio and Spotify were installed; the script left Home for the fake Netflix.
+- **Runs:** 9.
+
+| Budget | Median | Worst | Runs | Budget |
+|---|---|---|---|---|
+| Cold Home Draw Time | 266 ms | 353 ms | 266, 245, 277, 274, 252, 228, 253, 353, 280 | 800 ms |
+| Warm Home Draw Time | 60 ms | 250 ms | 89, 250, 52, 31, 70, 60, 38, 65, 42 | 200 ms |
+| Memory (total PSS) on Home | 29 MB | 29 MB | 29 each | 40 MB |
+
+The draw times are within budget; one warm run of the nine went over 200 ms (as one of main's runs did in the run before this one: the emulator's noise). The memory is within budget.
+
+**Against main under the same load:** main's release build (commit `fae8f93`), measured just before over 9 runs, gave a cold median of 332 ms (worst 803), a warm median of 85 ms (worst 173) and 25 MB. The clock costs about 4 MB more: its large bold text, its shadow and the date formats. An earlier version of this change, which set the clock's text before Home's first frame, gave 378 ms cold and 138 ms warm against main's 264 ms and 77 ms just before it; the clock now starts once the Dock's first frame is drawn, and shows a frame later.
+
 ## 2026-10-23: tv34 emulator, Dock icons and clearer glass
 
 - **Device:** the `tv34` AVD as below, started the same way, on the same Mac shared with other work.
