@@ -63,6 +63,10 @@ class Tv {
     fun inputsScreen(timeoutMs: Long = 5_000): UiObject2? =
         device.wait(Until.findObject(By.res(LAUNCHER, "inputs_screen")), timeoutMs)
 
+    /** Watches the screen for [timeoutMs] and returns whether the Inputs screen stayed on it all along. */
+    fun inputsStays(timeoutMs: Long = 2_000): Boolean =
+        device.wait(Until.gone(By.res(LAUNCHER, "inputs_screen")), timeoutMs) != true
+
     /** The rows of the inputs list; an empty list has no size, so it is not on screen at all. */
     private fun inputRows(): List<UiObject2> =
         device.findObject(By.res(LAUNCHER, "inputs"))?.children.orEmpty()

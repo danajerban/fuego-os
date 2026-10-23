@@ -10,7 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 
-/** The Inputs screen: the TV's HDMI inputs by name. */
+/** The Inputs screen: the TV's HDMI inputs by name. Choosing one switches the TV to it. */
 class InputsActivity : Activity() {
     private lateinit var list: ViewGroup
     private lateinit var noInputs: View
@@ -49,6 +49,7 @@ class InputsActivity : Activity() {
         inputs.forEach { input ->
             (inflater.inflate(R.layout.input_row, list, false) as TextView).also {
                 it.text = input.name
+                it.setOnClickListener { input.switchTo(this) }
                 list.addView(it)
             }
         }

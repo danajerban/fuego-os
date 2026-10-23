@@ -10,7 +10,8 @@ import org.junit.rules.ExternalResource
 /**
  * The TV's inputs on the emulator, which has none of its own. Its [connect] installs the fake TV
  * inputs (the fakeapp `tvinputs` flavour): two HDMI ports, a device behind HDMI 1 (as HDMI-CEC
- * adds) and a tuner. Afterwards the fake inputs are removed and the TV's input settings put back.
+ * adds) and a tuner. Afterwards the fake inputs and input player are removed and the TV's input
+ * settings put back.
  */
 class FakeTvInputs : ExternalResource() {
     private val tvInputManager = InstrumentationRegistry.getInstrumentation().targetContext
@@ -19,18 +20,23 @@ class FakeTvInputs : ExternalResource() {
 
     override fun before() {
         uninstallPackage(PACKAGE)
+        uninstallPackage(INPUT_PLAYER)
         settingsBefore = SETTINGS.associateWith { Shell.run("settings get secure $it").trim() }
         SETTINGS.forEach { Shell.run("settings delete secure $it") }
     }
 
     override fun after() {
         uninstallPackage(PACKAGE)
+        uninstallPackage(INPUT_PLAYER)
         settingsBefore.forEach { (key, value) ->
             if (value == "null") Shell.run("settings delete secure $key") else Shell.run("settings put secure $key $value")
         }
     }
 
-    /** Plugs in the fake inputs, and waits until the TV lists the HDMI ports. */
+    /**
+     * Plugs in the fake inputs, and waits until the TV lists the HDMI ports. Installing any app
+     * afterwards makes Android re-read the inputs and turn them back into tuners, so install first.
+     */
     fun connect() {
         installFakeApk("fakeapp-tvinputs-release.apk", PACKAGE)
         // Android lists an app's own TV inputs as tuners; this activity makes them HDMI inputs.
@@ -40,6 +46,12 @@ class FakeTvInputs : ExternalResource() {
             inputTypes().let { it[HDMI_1] == TvInputInfo.TYPE_HDMI && it[HDMI_2] == TvInputInfo.TYPE_HDMI }
         }
     }
+
+    /**
+     * Installs the fake TV input player (the fakeapp `inputplayer` flavour), which shows the input it
+     * was asked to play. The emulator has no TV input player of its own.
+     */
+    fun installInputPlayer() = installFakeApk("fakeapp-inputplayer-release.apk", INPUT_PLAYER)
 
     /** Names the input [inputId] [name], as the owner does in TV Settings > Inputs. */
     fun name(inputId: String, name: String) =
@@ -64,6 +76,7 @@ class FakeTvInputs : ExternalResource() {
         const val PACKAGE = "io.github.danajerban.fuegoos.faketvinputs"
         const val HDMI_1 = "$PACKAGE/io.github.danajerban.fuegoos.fakeapp.Hdmi1Input"
         const val HDMI_2 = "$PACKAGE/io.github.danajerban.fuegoos.fakeapp.Hdmi2Input"
+        const val INPUT_PLAYER = "com.google.android.tv.inputplayer"
 
         /** Where TV Settings keeps the names the owner gave inputs, and the inputs the owner hid. */
         private val SETTINGS = listOf("tv_input_custom_labels", "tv_input_hidden_inputs")

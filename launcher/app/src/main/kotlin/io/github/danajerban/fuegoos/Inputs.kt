@@ -1,11 +1,33 @@
 package io.github.danajerban.fuegoos
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
+import android.media.tv.TvContract
 import android.media.tv.TvInputInfo
 import android.media.tv.TvInputManager
 
+/** The TV input player: Google TV's app that shows an HDMI input full screen, without the Stock Launcher. */
+private const val TV_INPUT_PLAYER = "com.google.android.tv.inputplayer"
+
 /** An HDMI input of the TV: the name the owner knows it by, and its TV input ID. */
-class HdmiInput(val name: CharSequence, val id: String)
+class HdmiInput(val name: CharSequence, val id: String) {
+    /**
+     * Switches the TV to this input through the TV input player. Without the player, any app that plays
+     * passthrough inputs will do; with none at all, nothing happens.
+     */
+    fun switchTo(context: Context) {
+        val play = Intent(Intent.ACTION_VIEW, TvContract.buildChannelUriForPassthroughInput(id))
+        for (intent in listOf(Intent(play).setPackage(TV_INPUT_PLAYER), play)) {
+            try {
+                context.startActivity(intent)
+                return
+            } catch (e: ActivityNotFoundException) {
+                continue
+            }
+        }
+    }
+}
 
 /**
  * The TV's HDMI ports, as the TV input framework lists them now, in input ID order (port order on TVs

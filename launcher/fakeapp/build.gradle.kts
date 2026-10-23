@@ -1,6 +1,7 @@
 // Test-only stand-ins for the Dock's apps. Each flavour is a tiny TV app that carries the real app's
 // package name, so the UI tests can install it on an emulator that has no Netflix, Stremio or Spotify
-// and check that its tile opens it. The tvinputs flavour stands in for the TV's HDMI inputs.
+// and check that its tile opens it. The tvinputs and inputplayer flavours stand in for the TV's HDMI
+// inputs and the TV input player that switches to them.
 // Never shipped: only the Launcher's UI tests use these APKs.
 plugins {
     alias(libs.plugins.android.application)
@@ -48,6 +49,12 @@ android {
             dimension = "dockApp"
             applicationId = "io.github.danajerban.fuegoos.faketvinputs"
             resValue("string", "app_name", "Fake TV inputs")
+        }
+        // The TV input player, which the emulator lacks: it shows which input it was asked to play.
+        create("inputplayer") {
+            dimension = "dockApp"
+            applicationId = "com.google.android.tv.inputplayer"
+            resValue("string", "app_name", "Fake TV input player")
         }
     }
 

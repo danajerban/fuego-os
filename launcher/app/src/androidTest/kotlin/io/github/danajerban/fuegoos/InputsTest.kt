@@ -61,6 +61,30 @@ class InputsTest {
     }
 
     @Test
+    fun choosingAnInputOpensItInTheTvInputPlayer() {
+        tvInputs.installInputPlayer()
+        tvInputs.connect()
+        openInputs()
+        tv.focusInput("HDMI 2")
+
+        tv.pressCenter()
+
+        assertTrue("Choosing HDMI 2 opened ${tv.foregroundPackage}", tv.waitForApp(FakeTvInputs.INPUT_PLAYER))
+        assertTrue("The TV input player did not get HDMI 2", tv.waitForText("Playing ${FakeTvInputs.HDMI_2}"))
+    }
+
+    @Test
+    fun withNothingToPlayInputsChoosingOneKeepsTheList() {
+        tvInputs.connect()
+        openInputs()
+        tv.focusInput("HDMI 2")
+
+        tv.pressCenter()
+
+        assertTrue("Choosing HDMI 2 left the list for ${tv.foregroundPackage}", tv.inputsStays())
+    }
+
+    @Test
     fun showsTheNamesTheOwnerGaveInputs() {
         tvInputs.connect()
         tvInputs.name(FakeTvInputs.HDMI_2, "Set-top box")
