@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
 ### Changed
 
 - The package lists, checked against the real Fuego 2K: entries `probe` found on the TV are marked confirmed; the Known-Bloat List gains the ACR ad-tracking app, the store demo, Google Feedback, the maker's e-manual, Google's screensaver (the Idle Screen replaces it), the USB media player and the preinstalled streaming apps the owner does not use; the Must-Keep List gains the TV stack HDMI depends on, the remote and Bluetooth pairing, the keyboard, WebView, the shell adb uses and the factory manager. Play Services is confirmed as the system updater. The evidence is in `docs/research/fuego-2k-packages.md`.
