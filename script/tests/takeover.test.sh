@@ -65,7 +65,7 @@ test_takeover_disables_no_takeover_package_without_the_owners_yes() {
 test_takeover_without_the_launcher_is_not_done() {
   run_fuego_answering yes apply
   assert_status 0
-  assert_output_contains "not done     Launcher: not on the TV, and no APK given (fuego apply --launcher APK)"
+  assert_output_contains "not done     Launcher: not on the TV, and no release to install it from"
   assert_output_contains "not done     Home Takeover: the Launcher is not on the TV"
   assert_equals "" "$(takeover_writes)" "Launcher and Home Takeover writes"
 }

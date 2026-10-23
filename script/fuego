@@ -8,6 +8,10 @@ set -u
 # Tests point FUEGO_ADB at the fake TV (script/tests/fake-adb).
 FUEGO_ADB=${FUEGO_ADB:-adb}
 
+# The one boundary to the network: every download goes through fetch_call, which runs $FUEGO_FETCH.
+# Tests point FUEGO_FETCH at the fake GitHub (script/tests/fake-github).
+FUEGO_FETCH=${FUEGO_FETCH:-curl}
+
 SETUP_DOC="https://github.com/danajerban/fuego-os/blob/main/docs/tv-setup.md"
 
 # The Launcher's app ID.
@@ -33,10 +37,12 @@ Commands:
                            and Home draw time. Changes nothing (Home is restarted to time it)
   apply [--dry-run] [--launcher APK]
                            save the Snapshot (first run only), disable the Known-Bloat List,
-                           set animation scales to 0.5, install the Launcher from APK, make it
-                           what Home opens (after your yes), and measure before and after. Safe
-                           to run again: it redoes the Home Takeover if a TV update undid it.
+                           set animation scales to 0.5, install the Launcher, make it what Home
+                           opens (after your yes), and measure before and after. Safe to run
+                           again: it redoes the Home Takeover if a TV update undid it.
                            --dry-run: list what would change and write nothing
+                           --launcher APK: install this APK instead of the one from the latest
+                           release (downloaded and checked against the release's SHA256SUMS)
   restore                  put package states, animation scales and Home back to the Snapshot,
                            and uninstall the Launcher
 
@@ -59,6 +65,13 @@ die() {
 # adb reads whatever waits on its input; it gets none, so the owner's answers stay for the script.
 adb_call() {
   "$FUEGO_ADB" "$@" < /dev/null
+}
+
+# fetch_call URL: downloads URL to standard output, over https only (redirects too). Fails on any
+# HTTP error, with curl's reason on standard error.
+fetch_call() {
+  "$FUEGO_FETCH" --fail --silent --show-error --location --proto =https --proto-redir =https \
+    "$1" < /dev/null
 }
 
 # --- Tools on the Mac --------------------------------------------------------------------
@@ -690,14 +703,76 @@ apply_speed_settings() {
 # The Launcher's Home activity (launcher/app/src/main/AndroidManifest.xml).
 LAUNCHER_HOME="$LAUNCHER_PACKAGE/.HomeActivity"
 
-# The APK given with apply --launcher.
-LAUNCHER_APK=""
+# Where apply gets the Launcher when no APK is given: the latest release on GitHub, made by
+# .github/workflows/release.yml.
+GITHUB_REPO=danajerban/fuego-os
+LATEST_RELEASE_API="https://api.github.com/repos/$GITHUB_REPO/releases/latest"
+RELEASE_DOWNLOADS="https://github.com/$GITHUB_REPO/releases/download"
+RELEASES_PAGE="https://github.com/$GITHUB_REPO/releases"
 
-# launcher_apk: the Launcher APK apply installs, or nothing when there is none to install. This is
-# the one place that decides where the APK comes from; for now, only a local file given with
-# --launcher.
+# The APK given with apply --launcher, or the one launcher_apk downloaded, and how the report
+# names where it came from.
+LAUNCHER_APK=""
+LAUNCHER_FROM=""
+
+# latest_release_tag: prints the tag of the latest release, as the GitHub API reports it, or
+# fails and prints why there is none.
+latest_release_tag() {
+  local output tag
+  if ! output=$(fetch_call "$LATEST_RELEASE_API" 2>&1); then
+    printf '%s\n' "$output" | tail -n 1
+    return 1
+  fi
+  tag=$(printf '%s\n' "$output" | sed -n 's/^ *"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)
+  case "$tag" in
+    "" | *[!0-9A-Za-z.-]*)
+      echo "no release tag in GitHub's answer"
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$tag"
+}
+
+# launcher_apk: the one place that decides where the Launcher APK apply installs comes from: the
+# file given with --launcher, or else the latest release's APK, downloaded to a folder removed
+# when the script exits and checked against the release's SHA256SUMS. A dry run only looks up the
+# release. Sets LAUNCHER_APK and LAUNCHER_FROM. Prints the outcome and fails when there is no APK
+# to install.
 launcher_apk() {
-  printf '%s\n' "$LAUNCHER_APK"
+  local tag apk error want got
+  if [ -n "$LAUNCHER_APK" ]; then
+    LAUNCHER_FROM=$LAUNCHER_APK
+    return 0
+  fi
+  if ! tag=$(latest_release_tag); then
+    outcome "not done" "Launcher: not on the TV, and no release to install it from at $RELEASES_PAGE ($tag). Give an APK instead: fuego apply --launcher APK"
+    return 1
+  fi
+  apk="fuego-os-launcher-$tag.apk"
+  LAUNCHER_FROM="release $tag"
+  [ -z "$DRY_RUN" ] || return 0
+  LAUNCHER_DOWNLOADS=$(mktemp -d "${TMPDIR:-/tmp}/fuego-launcher.XXXXXX") || {
+    outcome failed "$LAUNCHER_PACKAGE (no folder to download $apk to)"
+    return 1
+  }
+  trap 'rm -rf "$LAUNCHER_DOWNLOADS"' EXIT
+  if ! error=$(fetch_call "$RELEASE_DOWNLOADS/$tag/SHA256SUMS" 2>&1 > "$LAUNCHER_DOWNLOADS/SHA256SUMS") ||
+    ! error=$(fetch_call "$RELEASE_DOWNLOADS/$tag/$apk" 2>&1 > "$LAUNCHER_DOWNLOADS/$apk"); then
+    outcome failed "$LAUNCHER_PACKAGE (can't download $apk and its checksum from release $tag: $(printf '%s\n' "$error" | tail -n 1))"
+    return 1
+  fi
+  # SHA256SUMS lines are "<checksum>  <file>" ("*<file>" when written in binary mode).
+  want=$(awk -v name="$apk" '$2 == name || $2 == "*" name { print $1; exit }' \
+    "$LAUNCHER_DOWNLOADS/SHA256SUMS")
+  got=$(shasum -a 256 "$LAUNCHER_DOWNLOADS/$apk" | awk '{ print $1 }')
+  if [ -z "$want" ]; then
+    outcome failed "$LAUNCHER_PACKAGE ($apk from release $tag has no checksum in SHA256SUMS, so it was not installed)"
+    return 1
+  elif [ "$got" != "$want" ]; then
+    outcome failed "$LAUNCHER_PACKAGE ($apk from release $tag does not match its checksum in SHA256SUMS, so it was not installed)"
+    return 1
+  fi
+  LAUNCHER_APK="$LAUNCHER_DOWNLOADS/$apk"
 }
 
 # Set by apply_launcher once the Launcher is on the TV (or would be, in a dry run).
@@ -706,31 +781,27 @@ LAUNCHER_READY=""
 # Installs the Launcher, a step of its own before the Home Takeover touches the Stock Launcher.
 # The install is read back: adb reports Success and the TV lists the Launcher as enabled.
 apply_launcher() {
-  local apk output error
+  local output error
   say "Launcher"
-  apk=$(launcher_apk)
-  if [ -z "$apk" ]; then
-    if [ "$(package_state "$LAUNCHER_PACKAGE")" = missing ]; then
-      outcome "not done" "Launcher: not on the TV, and no APK given (fuego apply --launcher APK)"
-    else
-      outcome unchanged "$LAUNCHER_PACKAGE already installed"
-      LAUNCHER_READY=1
-    fi
-    return 0
-  fi
-  if [ -n "$DRY_RUN" ]; then
-    outcome "would install" "$LAUNCHER_PACKAGE from $apk"
+  if [ -z "$LAUNCHER_APK" ] && [ "$(package_state "$LAUNCHER_PACKAGE")" != missing ]; then
+    outcome unchanged "$LAUNCHER_PACKAGE already installed"
     LAUNCHER_READY=1
     return 0
   fi
-  output=$(adb_call install -r "$apk" 2>&1)
+  launcher_apk || return 0
+  if [ -n "$DRY_RUN" ]; then
+    outcome "would install" "$LAUNCHER_PACKAGE from $LAUNCHER_FROM"
+    LAUNCHER_READY=1
+    return 0
+  fi
+  output=$(adb_call install -r "$LAUNCHER_APK" 2>&1)
   if [ "$(printf '%s\n' "$output" | tail -n 1 | tr -d '\r')" = Success ] &&
     [ "$(package_state "$LAUNCHER_PACKAGE")" = enabled ]; then
-    outcome installed "$LAUNCHER_PACKAGE from $apk"
+    outcome installed "$LAUNCHER_PACKAGE from $LAUNCHER_FROM"
     LAUNCHER_READY=1
   else
     error=$(printf '%s\n' "$output" | grep -m 1 -e '^adb: ' -e 'Failure')
-    outcome failed "$LAUNCHER_PACKAGE (not installed from $apk${error:+: $error})"
+    outcome failed "$LAUNCHER_PACKAGE (not installed from $LAUNCHER_FROM${error:+: $error})"
   fi
 }
 

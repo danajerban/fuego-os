@@ -1,0 +1,64 @@
+#!/bin/bash
+# The fake GitHub: stands in for curl in the script's tests (FUEGO_FETCH points here).
+#
+# It answers the downloads the script makes the way curl --fail does against GitHub, from the
+# releases held as plain files in $FAKE_GITHUB (made by fake_github_new in lib.sh):
+#
+#   latest                       the tag of the latest release (absent: no release published)
+#   releases/<tag>/<asset>       each release's assets
+#   offline                      present: no network, every download fails as curl does
+#   calls                        every URL asked for, one per line
+#
+# Takes curl's options and one URL; the body goes to standard output. A URL the fake doesn't
+# know fails with exit status 64: teach it here, answering exactly as GitHub does.
+
+set -u
+github=${FAKE_GITHUB:?FAKE_GITHUB must point at a fake GitHub made by fake_github_new}
+REPO=danajerban/fuego-os
+
+# The URL comes last, after curl's options.
+url=""
+for arg in "$@"; do
+  url=$arg
+done
+printf '%s\n' "$url" >> "$github/calls"
+
+host=${url#https://}
+host=${host%%/*}
+if [ -e "$github/offline" ]; then
+  printf 'curl: (6) Could not resolve host: %s\n' "$host" >&2
+  exit 6
+fi
+
+not_found() {
+  printf 'curl: (22) The requested URL returned error: 404\n' >&2
+  exit 22
+}
+
+case "$url" in
+  "https://api.github.com/repos/$REPO/releases/latest")
+    [ -f "$github/latest" ] || not_found
+    tag=$(cat "$github/latest")
+    # The fields the script reads, laid out as the API prints them.
+    cat <<EOF
+{
+  "url": "https://api.github.com/repos/$REPO/releases/1",
+  "html_url": "https://github.com/$REPO/releases/tag/$tag",
+  "id": 1,
+  "tag_name": "$tag",
+  "name": "$tag",
+  "draft": false,
+  "prerelease": false
+}
+EOF
+    ;;
+  "https://github.com/$REPO/releases/download/"*/*)
+    asset=${url#"https://github.com/$REPO/releases/download/"}
+    [ -f "$github/releases/$asset" ] || not_found
+    cat "$github/releases/$asset"
+    ;;
+  *)
+    printf 'fake GitHub: unknown URL %s\n' "$url" >&2
+    exit 64
+    ;;
+esac
