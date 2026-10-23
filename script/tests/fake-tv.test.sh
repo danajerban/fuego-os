@@ -143,3 +143,53 @@ test_fake_tv_with_debugging_off_refuses_connections() {
   adb_fake shell getprop ro.build.id
   assert_status 1
 }
+
+# The expected outputs below are copied from an Android TV API 34 emulator.
+
+test_fake_tv_reports_memory_like_the_kernel() {
+  fake_tv_memory 2025912 880436
+  adb_fake shell cat /proc/meminfo
+  assert_status 0
+  assert_output_contains "MemTotal:        2025912 kB"
+  assert_output_contains "MemAvailable:     880436 kB"
+}
+
+test_fake_tv_reports_storage_in_kilobyte_blocks() {
+  fake_tv_storage 10167132 565024 9454652
+  adb_fake shell df -k /data
+  assert_status 0
+  assert_equals "Filesystem       1K-blocks   Used Available Use% Mounted on
+/dev/block/dm-37  10167132 565024   9454652   6% /data/user/0" "$OUTPUT"
+}
+
+test_fake_tv_times_a_cold_start_of_home() {
+  local home
+  home=$(fake_tv_home)
+  fake_tv_home_draw_ms 1432
+  adb_fake shell am start -W -S -n "$home"
+  assert_status 0
+  assert_equals "Starting: Intent { cmp=$home }
+Status: ok
+LaunchState: COLD
+Activity: $home
+TotalTime: 1432
+WaitTime: 1440
+Complete" "$OUTPUT"
+  assert_equals "$home" "$(fake_tv_focus)"
+}
+
+test_fake_tv_cannot_start_a_missing_activity() {
+  adb_fake shell am start -W -S -n no.such.pkg/.Main
+  assert_status 0
+  assert_equals "Starting: Intent { cmp=no.such.pkg/.Main }
+Error type 3
+Error: Activity class {no.such.pkg/no.such.pkg.Main} does not exist." "$OUTPUT"
+}
+
+test_fake_tv_window_list_has_no_focus_lines() {
+  adb_fake shell dumpsys window windows
+  assert_output_contains "WINDOW MANAGER WINDOWS (dumpsys window windows)"
+  assert_output_lacks "mCurrentFocus"
+  adb_fake shell dumpsys window
+  assert_output_contains "mCurrentFocus=Window{"
+}
