@@ -41,7 +41,8 @@ Releases will carry the Launcher APK and the script bundle.
 ## How to undo
 
 - `restore` puts back everything the Snapshot recorded, hands Home back to the Stock Launcher and uninstalls the Launcher. It works even if the Launcher was already uninstalled.
-- The Snapshot is a text file on the Mac, at `~/Library/Application Support/fuego-os/snapshot` (set `FUEGO_STATE_DIR` to keep it elsewhere). Keep it: it is the way back.
+- The Snapshot is a text file on the Mac, at `~/Library/Application Support/fuego-os/snapshot` (set `FUEGO_STATE_DIR` to keep it elsewhere). Keep it: it is the way back. Your answers to the Check Step go in a separate `checks` file beside it, so the Snapshot is never rewritten.
+- If casting breaks after the Home Takeover, answer "no" to the casting check: `apply` turns the setup wizard back on (the Casting Fallback) and leaves it on in later runs unless you say yes to disabling it again.
 - A factory reset also undoes everything: Debloat applies to the TV's user only, and the Launcher is an ordinary app.
 
 ## Contributing and security
