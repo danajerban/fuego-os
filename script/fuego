@@ -1254,6 +1254,16 @@ restore_animation_scales() {
   done
 }
 
+# The screensaver and ambient-mode settings go back to the Snapshot. It runs before
+# restore_launcher, so the screensaver never points at the Launcher once it is uninstalled.
+restore_screensaver() {
+  local key
+  say "Screensaver"
+  for key in $SCREENSAVER_SETTINGS; do
+    set_setting secure "$key" "$(snapshot_value "setting.secure.$key")"
+  done
+}
+
 # Home goes back to the Snapshot's Home activity. It runs after restore_packages, because the TV
 # refuses a Home activity whose package is disabled.
 restore_home() {
@@ -1313,6 +1323,8 @@ cmd_restore() {
   restore_packages
   say
   restore_animation_scales
+  say
+  restore_screensaver
   say
   restore_home
   say
