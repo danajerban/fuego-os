@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-23
+
 ### Changed
 
 - The Dock's tiles show an icon above their label: each app's own launcher icon, read from the TV when Home opens without holding up its first frame (an app with no icon keeps its label alone), and the Launcher's own white line icons for Inputs and Settings. The tiles are clearer glass with a light edge, so Ember shows through more, and Ember is 9% darker on Home and the Idle Screen.

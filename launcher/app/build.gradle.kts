@@ -15,8 +15,8 @@ android {
         // The TV runs Android TV OS 14 (API 34), and nothing else is supported.
         minSdk = 34
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.2.0"
+        versionCode = 4
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
