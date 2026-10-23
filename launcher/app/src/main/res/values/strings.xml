@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fuego</string>
+    <string name="tile_netflix" translatable="false">Netflix</string>
+    <string name="tile_youtube" translatable="false">YouTube</string>
+    <string name="tile_stremio" translatable="false">Stremio</string>
+    <string name="tile_spotify" translatable="false">Spotify</string>
+    <string name="tile_settings">Settings</string>
+</resources>
