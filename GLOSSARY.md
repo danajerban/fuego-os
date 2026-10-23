@@ -50,7 +50,7 @@
 
 ## The Launcher
 
-**Dock**: The Launcher's row of tiles: Netflix, YouTube, Stremio, Spotify, Inputs, Settings.
+**Dock**: The Launcher's row of tiles: Netflix, YouTube, Stremio, Spotify, Inputs, Settings. Each tile shows an icon above its label.
 
 **Tile**: One entry in the Dock. An app's tile is hidden while that app is not on the TV.
 
