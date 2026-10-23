@@ -100,6 +100,38 @@ class Tv {
     }
 
     /**
+     * The colours on screen (0xRRGGBB) in a patch at the middle of where the tile labelled [label] draws its
+     * icon: centred across the tile, between a fifth and a third of the way down, above where its label is.
+     */
+    fun tileIconColours(label: String): List<Int> {
+        val tile = tileBounds(label)
+        val screen = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            .copy(Bitmap.Config.ARGB_8888, false)
+        val xs = (tile.centerX() - tile.width() / 16)..(tile.centerX() + tile.width() / 16)
+        val ys = (tile.top + tile.height() / 5)..(tile.top + tile.height() / 3)
+        return ys.flatMap { y -> xs.map { x -> screen.getPixel(x, y) and 0xFFFFFF } }
+    }
+
+    /**
+     * Waits until the icon patch of the tile labelled [label] (see [tileIconColours]) shows what [shows]
+     * looks for, and returns whether it did within [timeoutMs]: icons load after Home's first frame.
+     */
+    fun waitForTileIcon(label: String, timeoutMs: Long = 5_000, shows: (List<Int>) -> Boolean): Boolean {
+        val end = SystemClock.uptimeMillis() + timeoutMs
+        while (SystemClock.uptimeMillis() < end) {
+            if (shows(tileIconColours(label))) return true
+            SystemClock.sleep(100)
+        }
+        return false
+    }
+
+    /** Whether most of [patch] is [colour] (0xRRGGBB): a solid icon of that colour fills it. */
+    fun mostly(patch: List<Int>, colour: Int) = patch.count { closeColours(it, colour) } * 2 > patch.size
+
+    /** Whether some of [patch] is white: one of the Launcher's white line icons crosses it. */
+    fun hasWhiteLines(patch: List<Int>) = patch.count { closeColours(it, 0xFFFFFF) } * 20 > patch.size
+
+    /**
      * Waits until the artwork shows one of [colours] (by name), and returns its name, or null when none
      * shows within [timeoutMs].
      */

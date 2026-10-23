@@ -9,6 +9,10 @@
     <dimen name="dock_tile_gap">8dp</dimen>
     <dimen name="dock_tile_corner">12dp</dimen>
     <dimen name="dock_tile_text">20sp</dimen>
+    <!-- A tile's icon sits above its label; the padding centres the two together in the tile. -->
+    <dimen name="dock_tile_icon">36dp</dimen>
+    <dimen name="dock_tile_icon_gap">6dp</dimen>
+    <dimen name="dock_tile_padding">12dp</dimen>
     <!-- The focus highlight is a tile plus its glow on every side. -->
     <dimen name="focus_glass_glow">6dp</dimen>
     <dimen name="focus_glass_width">172dp</dimen>

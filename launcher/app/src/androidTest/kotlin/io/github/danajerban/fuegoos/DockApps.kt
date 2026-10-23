@@ -3,12 +3,15 @@ package io.github.danajerban.fuegoos
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.rules.ExternalResource
 
-/** A Dock app as the TV knows it: its package and the fake APK that stands in for it on the emulator. */
-enum class DockApp(val packageName: String, val fakeApk: String) {
-    NETFLIX("com.netflix.ninja", "fakeapp-netflix-release.apk"),
-    YOUTUBE("com.google.android.youtube.tv", "fakeapp-youtube-release.apk"),
-    STREMIO("com.stremio.one", "fakeapp-stremio-release.apk"),
-    SPOTIFY("com.spotify.tv.android", "fakeapp-spotify-release.apk"),
+/**
+ * A Dock app as the TV knows it: its package, the fake APK that stands in for it on the emulator, and the
+ * colour (0xRRGGBB) of that fake's icon, a plain square (see the fakeapp module's build file).
+ */
+enum class DockApp(val packageName: String, val fakeApk: String, val fakeIconColour: Int) {
+    NETFLIX("com.netflix.ninja", "fakeapp-netflix-release.apk", 0xE50914),
+    YOUTUBE("com.google.android.youtube.tv", "fakeapp-youtube-release.apk", 0xFF0033),
+    STREMIO("com.stremio.one", "fakeapp-stremio-release.apk", 0x7B5BF5),
+    SPOTIFY("com.spotify.tv.android", "fakeapp-spotify-release.apk", 0x1DB954),
 }
 
 /**
