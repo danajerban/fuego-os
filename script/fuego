@@ -44,7 +44,8 @@ Commands:
                            of Google's ambient mode, ask you to check casting, HDMI inputs, Wi-Fi
                            and the remote's buttons, and measure before and after. If casting is
                            broken, the setup wizard alone is turned back on. Safe to run again:
-                           it redoes the Home Takeover if a TV update undid it.
+                           it updates the Launcher when the latest release is newer, and redoes
+                           the Home Takeover if a TV update undid it.
                            --dry-run: list what would change and write nothing
                            --skip-checks: leave the checks for the next apply
                            --launcher APK: install this APK instead of the one from the latest
@@ -782,12 +783,10 @@ latest_release_tag() {
 }
 
 # launcher_apk: the one place that decides where the Launcher APK apply installs comes from: the
-# file given with --launcher, or else the latest release's APK, downloaded to a folder removed
-# when the script exits and checked against the release's SHA256SUMS. A dry run only looks up the
-# release. Sets LAUNCHER_APK and LAUNCHER_FROM. Prints the outcome and fails when there is no APK
-# to install.
+# file given with --launcher, or else the latest release's APK (release_apk). Sets LAUNCHER_APK and
+# LAUNCHER_FROM. Prints the outcome and fails when there is no APK to install.
 launcher_apk() {
-  local tag apk error want got
+  local tag
   if [ -n "$LAUNCHER_APK" ]; then
     LAUNCHER_FROM=$LAUNCHER_APK
     return 0
@@ -796,6 +795,14 @@ launcher_apk() {
     outcome "not done" "Launcher: not on the TV, and no release to install it from at $RELEASES_PAGE ($tag). Give an APK instead: fuego apply --launcher APK"
     return 1
   fi
+  release_apk "$tag"
+}
+
+# release_apk TAG: downloads release TAG's Launcher APK to a folder removed when the script exits,
+# and checks it against the release's SHA256SUMS. A dry run only names the release. Sets
+# LAUNCHER_APK and LAUNCHER_FROM. Prints the outcome and fails when there is no APK to install.
+release_apk() {
+  local tag=$1 apk error want got
   apk="fuego-os-launcher-$tag.apk"
   LAUNCHER_FROM="release $tag"
   [ -z "$DRY_RUN" ] || return 0
@@ -823,17 +830,53 @@ launcher_apk() {
   LAUNCHER_APK="$LAUNCHER_DOWNLOADS/$apk"
 }
 
+# launcher_version: the installed Launcher's versionName, as `dumpsys package` reports it; empty
+# when there is none.
+launcher_version() {
+  adb_call shell dumpsys package "$LAUNCHER_PACKAGE" | tr -d '\r' |
+    sed -n 's/^ *versionName=//p' | head -n 1
+}
+
+# compare_versions A B: prints newer, same or older: how version A (X.Y.Z) compares with B, field
+# by field as numbers. Fails when either is not X.Y.Z.
+compare_versions() {
+  local a b x y
+  for x in "$1" "$2"; do
+    case "$x" in
+      *[!0-9.]* | .* | *. | *..*) return 1 ;;
+      *.*.*.*) return 1 ;;
+      *.*.*) ;;
+      *) return 1 ;;
+    esac
+  done
+  a=$1
+  b=$2
+  while [ -n "$a" ]; do
+    x=$((10#${a%%.*}))
+    y=$((10#${b%%.*}))
+    if [ "$x" -gt "$y" ]; then
+      echo newer
+      return 0
+    elif [ "$x" -lt "$y" ]; then
+      echo older
+      return 0
+    fi
+    case "$a" in *.*) a=${a#*.} b=${b#*.} ;; *) a="" ;; esac
+  done
+  echo same
+}
+
 # Set by apply_launcher once the Launcher is on the TV (or would be, in a dry run).
 LAUNCHER_READY=""
 
 # Installs the Launcher, a step of its own before the Home Takeover touches the Stock Launcher.
-# The install is read back: adb reports Success and the TV lists the Launcher as enabled.
+# With the Launcher already on the TV and no APK given, it is updated to the latest release when
+# that is newer, and otherwise left as it is.
 apply_launcher() {
-  local output error
   say "Launcher"
   if [ -z "$LAUNCHER_APK" ] && [ "$(package_state "$LAUNCHER_PACKAGE")" != missing ]; then
-    outcome unchanged "$LAUNCHER_PACKAGE already installed"
     LAUNCHER_READY=1
+    update_launcher
     return 0
   fi
   launcher_apk || return 0
@@ -842,15 +885,65 @@ apply_launcher() {
     LAUNCHER_READY=1
     return 0
   fi
-  output=$(adb_call install -r "$LAUNCHER_APK" 2>&1)
-  if [ "$(printf '%s\n' "$output" | tail -n 1 | tr -d '\r')" = Success ] &&
-    [ "$(package_state "$LAUNCHER_PACKAGE")" = enabled ]; then
-    outcome installed "$LAUNCHER_PACKAGE from $LAUNCHER_FROM"
-    LAUNCHER_READY=1
-  else
-    error=$(printf '%s\n' "$output" | grep -m 1 -e '^adb: ' -e 'Failure')
-    outcome failed "$LAUNCHER_PACKAGE (not installed from $LAUNCHER_FROM${error:+: $error})"
+  install_launcher "from $LAUNCHER_FROM" && LAUNCHER_READY=1
+}
+
+# update_launcher: installs the latest release over the Launcher on the TV when the release's tag
+# (v + versionName) is a higher X.Y.Z than the TV's versionName. A failure leaves the installed
+# Launcher in place.
+update_launcher() {
+  local installed tag order
+  installed=$(launcher_version)
+  if ! tag=$(latest_release_tag); then
+    outcome unchanged "$LAUNCHER_PACKAGE ${installed:+$installed }installed; couldn't check for a newer release ($tag)"
+    return 0
   fi
+  if ! order=$(compare_versions "${tag#v}" "$installed"); then
+    outcome unchanged "$LAUNCHER_PACKAGE ${installed:-(no version)} installed; can't compare it with release $tag, so it is left as it is"
+    return 0
+  fi
+  case "$order" in
+    same)
+      outcome unchanged "$LAUNCHER_PACKAGE $installed already the latest release ($tag)"
+      ;;
+    older)
+      outcome unchanged "$LAUNCHER_PACKAGE $installed is newer than the latest release ($tag), so it is left as it is"
+      ;;
+    newer)
+      release_apk "$tag" || return 0
+      if [ -n "$DRY_RUN" ]; then
+        outcome "would install" "$LAUNCHER_PACKAGE $installed -> ${tag#v} from release $tag"
+      else
+        install_launcher "$installed -> ${tag#v} from release $tag" "${tag#v}"
+      fi
+      ;;
+  esac
+}
+
+# install_launcher DESCRIPTION [VERSION]: installs LAUNCHER_APK with adb install -r and reads it
+# back: adb reports Success and the TV lists the Launcher as enabled (at VERSION, for an update).
+# Prints the outcome, naming the install by DESCRIPTION; fails when it did not take.
+install_launcher() {
+  local description=$1 version=${2-} output error
+  output=$(adb_call install -r "$LAUNCHER_APK" 2>&1)
+  if [ "$(printf '%s\n' "$output" | sed '/^$/d' | tail -n 1 | tr -d '\r')" = Success ] &&
+    [ "$(package_state "$LAUNCHER_PACKAGE")" = enabled ] &&
+    { [ -z "$version" ] || [ "$(launcher_version)" = "$version" ]; }; then
+    outcome installed "$LAUNCHER_PACKAGE $description"
+    return 0
+  fi
+  error=$(printf '%s\n' "$output" | grep -m 1 -e '^adb: ' -e 'Failure')
+  if [ -n "$version" ]; then
+    outcome failed "$LAUNCHER_PACKAGE (not updated $description${error:+: $error})"
+  else
+    outcome failed "$LAUNCHER_PACKAGE (not installed $description${error:+: $error})"
+  fi
+  case "$error" in
+    *INSTALL_FAILED_UPDATE_INCOMPATIBLE*)
+      say "  The release is signed with another key than the Launcher on the TV: run fuego restore, then fuego apply (docs/releasing.md)."
+      ;;
+  esac
+  return 1
 }
 
 # home_role_holder: the package the TV keeps as the chosen Home. It is how set-home-activity is

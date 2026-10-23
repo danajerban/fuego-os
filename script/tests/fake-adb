@@ -19,6 +19,8 @@
 #   settings-full-screen   present: Settings opens full screen, not as Android TV's panel over Home
 #   processes/<package>    a running package's TOTAL PSS in kB (dumpsys meminfo)
 #   sdcard/                files under /sdcard (also reachable as /storage/emulated/0)
+#   versions/<package>     "<versionName> <versionCode> <key>" of an app installed with adb install
+#                          (absent: "1.0 1 release")
 #   app-folders/<package>  the folders an installed app makes under /sdcard/Android/data/<package>/
 #                          when it starts, one per line (from the fake APK's "folder=" lines)
 #   link/                  pairing and connection: pair-address, pairing-code, address,
@@ -172,12 +174,15 @@ stop_package() {
   case "$(cat "$tv/focus")" in "$1"/*) echo null > "$tv/focus" ;; esac
 }
 
-# The fake APK is a text file: "package=<id>", any number of "home=<component>" lines, and any
-# number of "folder=<path>" lines, the folders the app makes under /sdcard/Android/data/<id>/
-# when it starts (as getExternalFilesDir does). An installed app's Home activities get priority 0:
-# Android ignores priority for them.
+# The fake APK is a text file: "package=<id>", any number of "home=<component>" lines, any
+# number of "folder=<path>" lines (the folders the app makes under /sdcard/Android/data/<id>/
+# when it starts, as getExternalFilesDir does), and optionally "version=<versionName>
+# <versionCode>" (default "1.0 1") and "key=<signing key name>" (default "release"). An installed
+# app's Home activities get priority 0: Android ignores priority for them.
+# Replacing an installed app (install -r) refuses a lower versionCode, then another signing key,
+# with Android's messages; a replace keeps the app's state and Home choice, and stops the old app.
 install() {
-  local apk="" pkg home
+  local apk="" pkg home version key was_code was_key
   for arg in "$@"; do
     case "$arg" in -*) ;; *) apk=$arg ;; esac
   done
@@ -191,9 +196,27 @@ install() {
     echo "Performing Streamed Install"
     die "adb: failed to install $apk: Failure [INSTALL_PARSE_FAILED_NOT_APK: Failed to parse /data/app/vmdl2012248553.tmp/base.apk: Failed to load asset path /data/app/vmdl2012248553.tmp/base.apk]"
   fi
+  version=$(sed -n 's/^version=//p' "$apk")
+  key=$(sed -n 's/^key=//p' "$apk")
+  [ -n "$version" ] || version="1.0 1"
+  [ -n "$key" ] || key=release
   echo "Performing Streamed Install"
+  if [ -f "$tv/packages/$pkg" ]; then
+    read -r _ was_code was_key <<< "$(package_version "$pkg")"
+    if [ "${version#* }" -lt "$was_code" ]; then
+      install_failed "$apk" "INSTALL_FAILED_VERSION_DOWNGRADE: Downgrade detected: Update version code ${version#* } is older than current $was_code"
+    elif [ "$key" != "$was_key" ]; then
+      install_failed "$apk" "INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package $pkg signatures do not match newer version; ignoring!"
+    fi
+  fi
   if ! ignored "$pkg"; then
-    printf 'enabled user\n' > "$tv/packages/$pkg"
+    if [ -f "$tv/packages/$pkg" ]; then
+      stop_package "$pkg"
+    else
+      printf 'enabled user\n' > "$tv/packages/$pkg"
+    fi
+    mkdir -p "$tv/versions"
+    printf '%s %s\n' "$version" "$key" > "$tv/versions/$pkg"
     sed -n 's/^home=//p' "$apk" | while read -r home; do
       home_candidate "$home" > /dev/null || echo "$home 0" >> "$tv/home-activities"
     done
@@ -203,12 +226,42 @@ install() {
   echo "Success"
 }
 
+# install_failed APK REASON: adb's answer to an install the TV refused, ending in a blank line.
+install_failed() {
+  printf 'adb: failed to install %s: Failure [%s]\n\n' "$1" "$2" >&2
+  exit 1
+}
+
+# package_version PACKAGE: "<versionName> <versionCode> <key>" of an installed package; packages
+# the fake TV starts with have version 1.0 (1), signed with "release".
+package_version() {
+  if [ -f "$tv/versions/$1" ]; then cat "$tv/versions/$1"; else echo "1.0 1 release"; fi
+}
+
+# dumpsys package PACKAGE: the package's block, as API 34 prints it (shortened to the lines
+# around its version).
+dumpsys_package() {
+  local name code
+  if [ ! -f "$tv/packages/$1" ]; then
+    echo "Unable to find package: $1"
+    return 0
+  fi
+  read -r name code _ <<< "$(package_version "$1")"
+  echo "Packages:"
+  echo "  Package [$1] (aa944d1):"
+  echo "    appId=10122"
+  echo "    versionCode=$code minSdk=34 targetSdk=34"
+  echo "    minExtensionVersions=[]"
+  echo "    versionName=$name"
+  echo "    usesNonSdkApi=false"
+}
+
 uninstall() {
   local pkg=${1-}
   [ -f "$tv/packages/$pkg" ] || die "Failure [DELETE_FAILED_INTERNAL_ERROR]"
   if ! ignored "$pkg"; then
     stop_package "$pkg"
-    rm -f "$tv/packages/$pkg" "$tv/app-folders/$pkg"
+    rm -f "$tv/packages/$pkg" "$tv/app-folders/$pkg" "$tv/versions/$pkg"
     rm -rf "$tv/sdcard/Android/data/$pkg"
     grep -v "^$pkg/" "$tv/home-activities" > "$tv/home-activities.new"
     mv "$tv/home-activities.new" "$tv/home-activities"
@@ -644,6 +697,7 @@ case "$*" in
   "shell input keyevent"*) log write; need_device; keyevent "${4-}" ;;
   "shell dumpsys window") log read; need_device; dumpsys_window ;;
   "shell dumpsys window windows") log read; need_device; dumpsys_window_windows ;;
+  "shell dumpsys package "*) log read; need_device; dumpsys_package "$4" ;;
   "shell dumpsys meminfo "*) log read; need_device; dumpsys_meminfo "$4" ;;
   "shell cat /proc/meminfo") log read; need_device; meminfo ;;
   "shell df -k /data") log read; need_device; df_data ;;

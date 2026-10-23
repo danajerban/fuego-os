@@ -101,11 +101,13 @@ repo_copy() {
   FUEGO="$TEST_DIR/repo/script/fuego"
 }
 
-# launcher_apk: writes a fake Launcher APK (the fake TV reads its "package=", "home=" and
-# "folder=" lines: the Launcher makes its Artwork Folder when it starts) and prints its path.
+# launcher_apk [VERSION_NAME VERSION_CODE [KEY]]: writes a fake Launcher APK and prints its path.
+# The fake TV reads its "package=", "home=", "folder=" (the Launcher makes its Artwork Folder when
+# it starts), "version=" and "key=" lines. The version defaults to 0.0.0 (versionCode 1) and the
+# signing key to "release".
 launcher_apk() {
-  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\nfolder=files/artwork\n' \
-    > "$TEST_DIR/launcher.apk"
+  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\nfolder=files/artwork\nversion=%s %s\nkey=%s\n' \
+    "${1:-0.0.0}" "${2:-1}" "${3:-release}" > "$TEST_DIR/launcher.apk"
   echo "$TEST_DIR/launcher.apk"
 }
 
@@ -352,12 +354,14 @@ fake_github_new() {
   : > "$FAKE_GITHUB/calls"
 }
 
-# fake_github_release TAG: publishes release TAG as the latest, with the fake Launcher APK and a
-# SHA256SUMS listing its checksum, named as the release workflow names them.
+# fake_github_release TAG [VERSION_CODE [KEY]]: publishes release TAG (vX.Y.Z) as the latest, with
+# the fake Launcher APK and a SHA256SUMS listing its checksum, named as the release workflow names
+# them. The APK's versionName is TAG without its "v", as the release workflow requires; its
+# versionCode defaults to 1 and its signing key to "release".
 fake_github_release() {
   local dir="$FAKE_GITHUB/releases/$1"
   mkdir -p "$dir"
-  cp "$(launcher_apk)" "$dir/fuego-os-launcher-$1.apk"
+  cp "$(launcher_apk "${1#v}" "${2:-1}" "${3:-release}")" "$dir/fuego-os-launcher-$1.apk"
   (cd "$dir" && shasum -a 256 "fuego-os-launcher-$1.apk") > "$dir/SHA256SUMS"
   printf '%s\n' "$1" > "$FAKE_GITHUB/latest"
 }

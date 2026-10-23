@@ -58,14 +58,90 @@ test_apply_with_a_local_launcher_apk_downloads_nothing() {
   assert_equals "" "$(fake_github_calls)" "downloads"
 }
 
-test_apply_with_the_launcher_already_on_the_tv_downloads_nothing() {
-  fake_github_release v0.2.0
-  fake_tv_install_package "$LAUNCHER" user
-  fake_tv_home_activity "$LAUNCHER_HOME" 0
-  run_fuego_answering yes apply
+# An earlier apply installed Launcher 0.1.0 (versionCode 2) and took over Home.
+launcher_0_1_0_in_place() {
+  run_fuego_answering yes apply --skip-checks --launcher "$(launcher_apk 0.1.0 2)"
   assert_status 0
-  assert_output_contains "unchanged    $LAUNCHER already installed"
-  assert_equals "" "$(fake_github_calls)" "downloads"
+  : > "$FAKE_TV/calls"
+}
+
+# tv_launcher_version: the Launcher's versionName as the TV reports it.
+tv_launcher_version() {
+  FAKE_TV_INSPECT=1 "$FUEGO_ADB" shell dumpsys package "$LAUNCHER" | sed -n 's/^ *versionName=//p'
+}
+
+API=https://api.github.com/repos/danajerban/fuego-os/releases/latest
+
+test_apply_updates_the_launcher_to_a_newer_release() {
+  launcher_0_1_0_in_place
+  fake_github_release v0.2.0 3
+  run_fuego apply --skip-checks
+  assert_status 0
+  assert_output_contains "installed    $LAUNCHER 0.1.0 -> 0.2.0 from release v0.2.0"
+  assert_equals "$API
+$RELEASES/download/v0.2.0/SHA256SUMS
+$RELEASES/download/v0.2.0/fuego-os-launcher-v0.2.0.apk" "$(fake_github_calls)" "downloads"
+  assert_equals 0.2.0 "$(tv_launcher_version)"
+  # The update keeps the Home Takeover and the Idle Screen, and apply finds them in place.
+  assert_output_contains "unchanged    Home opens the Launcher ($LAUNCHER_HOME)"
+  assert_output_contains "unchanged    screensaver_components already $LAUNCHER/.IdleScreen"
+}
+
+test_apply_leaves_the_launcher_at_the_latest_release() {
+  launcher_0_1_0_in_place
+  fake_github_release v0.1.0 2
+  run_fuego apply --skip-checks
+  assert_status 0
+  assert_output_contains "unchanged    $LAUNCHER 0.1.0 already the latest release (v0.1.0)"
+  assert_equals "$API" "$(fake_github_calls)" "downloads"
+  assert_equals "" "$(fake_tv_writes | grep ' install ')" "install writes"
+}
+
+test_apply_leaves_a_launcher_newer_than_the_latest_release() {
+  run_fuego_answering yes apply --skip-checks --launcher "$(launcher_apk 0.10.0 11)"
+  : > "$FAKE_TV/calls"
+  fake_github_release v0.9.0 10
+  run_fuego apply --skip-checks
+  assert_status 0
+  assert_output_contains "unchanged    $LAUNCHER 0.10.0 is newer than the latest release (v0.9.0), so it is left as it is"
+  assert_equals "$API" "$(fake_github_calls)" "downloads"
+  assert_equals 0.10.0 "$(tv_launcher_version)"
+}
+
+test_apply_offline_keeps_the_installed_launcher_and_carries_on() {
+  launcher_0_1_0_in_place
+  fake_github_release v0.2.0 3
+  fake_github_offline
+  run_fuego apply --skip-checks
+  assert_status 0
+  assert_output_contains "unchanged    $LAUNCHER 0.1.0 installed; couldn't check for a newer release (curl: (6) Could not resolve host: api.github.com)"
+  assert_output_contains "unchanged    Home opens the Launcher ($LAUNCHER_HOME)"
+  assert_output_contains "Idle Screen"
+  assert_equals 0.1.0 "$(tv_launcher_version)"
+}
+
+test_apply_dry_run_names_the_launcher_update_and_downloads_nothing() {
+  launcher_0_1_0_in_place
+  fake_github_release v0.2.0 3
+  run_fuego apply --dry-run
+  assert_status 0
+  assert_output_contains "would install $LAUNCHER 0.1.0 -> 0.2.0 from release v0.2.0"
+  assert_equals "$API" "$(fake_github_calls)" "downloads"
+  assert_no_writes
+  assert_equals 0.1.0 "$(tv_launcher_version)"
+}
+
+test_apply_reports_a_launcher_update_the_tv_refuses() {
+  launcher_0_1_0_in_place
+  fake_github_release v0.2.0 3 another-key
+  run_fuego apply --skip-checks
+  assert_status 1
+  assert_output_contains "failed       $LAUNCHER (not updated 0.1.0 -> 0.2.0 from release v0.2.0: adb: failed to install"
+  assert_output_contains "INSTALL_FAILED_UPDATE_INCOMPATIBLE"
+  assert_output_contains "The release is signed with another key than the Launcher on the TV: run fuego restore, then fuego apply (docs/releasing.md)."
+  # The Launcher that is there stays, and the rest of apply goes on with it.
+  assert_equals 0.1.0 "$(tv_launcher_version)"
+  assert_output_contains "unchanged    Home opens the Launcher ($LAUNCHER_HOME)"
 }
 
 test_apply_without_a_release_leaves_the_launcher_not_done() {

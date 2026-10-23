@@ -60,6 +60,53 @@ adb: failed to stat $TEST_DIR/no-such.apk: No such file or directory" "$OUTPUT"
   assert_output_contains "adb: failed to install $TEST_DIR/junk.apk: Failure [INSTALL_PARSE_FAILED_NOT_APK: Failed to parse"
 }
 
+# The outputs in the version tests below are copied from an Android TV API 34 emulator, with
+# Launcher debug builds of versionCode 1 and 2, and one re-signed with another key.
+
+test_fake_tv_reports_an_installed_apps_version() {
+  adb_fake install -r "$(launcher_apk 0.1.0 2)"
+  adb_fake shell dumpsys package io.github.danajerban.fuegoos
+  assert_status 0
+  assert_equals "Packages:
+  Package [io.github.danajerban.fuegoos] (aa944d1):
+    appId=10122
+    versionCode=2 minSdk=34 targetSdk=34
+    minExtensionVersions=[]
+    versionName=0.1.0
+    usesNonSdkApi=false" "$OUTPUT"
+  adb_fake shell dumpsys package no.such.package
+  assert_status 0
+  assert_equals "Unable to find package: no.such.package" "$OUTPUT"
+}
+
+test_fake_tv_replaces_an_app_with_a_newer_version_and_keeps_the_home_choice() {
+  adb_fake install -r "$(launcher_apk 0.1.0 2)"
+  adb_fake shell cmd package set-home-activity io.github.danajerban.fuegoos/.HomeActivity
+  fake_tv_process io.github.danajerban.fuegoos 17300
+  adb_fake install -r "$(launcher_apk 0.2.0 3)"
+  assert_status 0
+  assert_equals "Performing Streamed Install
+Success" "$OUTPUT"
+  adb_fake shell dumpsys package io.github.danajerban.fuegoos
+  assert_output_contains "    versionName=0.2.0"
+  assert_equals io.github.danajerban.fuegoos/.HomeActivity "$(cat "$FAKE_TV/home")" "the Home choice"
+  [ ! -e "$FAKE_TV/processes/io.github.danajerban.fuegoos" ] || fail "the old Launcher kept running"
+}
+
+test_fake_tv_refuses_an_older_version_or_another_key() {
+  adb_fake install -r "$(launcher_apk 0.1.0 2)"
+  adb_fake install -r "$(launcher_apk 0.0.0 1)"
+  assert_status 1
+  assert_equals "Performing Streamed Install
+adb: failed to install $TEST_DIR/launcher.apk: Failure [INSTALL_FAILED_VERSION_DOWNGRADE: Downgrade detected: Update version code 1 is older than current 2]" "$OUTPUT"
+  adb_fake install -r "$(launcher_apk 0.2.0 3 other)"
+  assert_status 1
+  assert_equals "Performing Streamed Install
+adb: failed to install $TEST_DIR/launcher.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package io.github.danajerban.fuegoos signatures do not match newer version; ignoring!]" "$OUTPUT"
+  adb_fake shell dumpsys package io.github.danajerban.fuegoos
+  assert_output_contains "    versionCode=2 minSdk=34 targetSdk=34"
+}
+
 test_fake_tv_resolves_home_in_short_form_with_its_priority() {
   adb_fake shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME
   assert_equals "priority=2 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true

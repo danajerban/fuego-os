@@ -81,7 +81,7 @@ test_takeover_uses_a_launcher_already_on_the_tv() {
   fake_tv_home_activity "$LAUNCHER_HOME" 0
   run_fuego_answering yes apply
   assert_status 0
-  assert_output_contains "unchanged    $LAUNCHER already installed"
+  assert_output_contains "unchanged    $LAUNCHER 1.0 installed; couldn't check for a newer release"
   assert_equals "$LAUNCHER_HOME" "$(fake_tv_home)"
 }
 
