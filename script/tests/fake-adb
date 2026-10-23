@@ -13,6 +13,7 @@
 #   meminfo                "<MemTotal kB> <MemAvailable kB>"
 #   storage                /data as "<1K-blocks> <used> <available>"
 #   home-draw-ms           how long a cold start of Home takes to draw
+#   processes/<package>    a running package's TOTAL PSS in kB (dumpsys meminfo)
 #   sdcard/                files under /sdcard (also reachable as /storage/emulated/0)
 #   link/                  pairing and connection: pair-address, pairing-code, address,
 #                          paired (present once paired), connected (connected addresses)
@@ -146,12 +147,19 @@ list_packages() {
 set_package_state() {
   local command=$1 pkg=$2 new=$3 state kind
   if [ ! -f "$tv/packages/$pkg" ]; then
-    echo "Exception occurred while executing '$command':" >&2
-    die "java.lang.IllegalArgumentException: Unknown package: $pkg" 255
+    {
+      echo
+      echo "Exception occurred while executing '$command':"
+      echo "java.lang.IllegalArgumentException: Unknown package: $pkg"
+      printf '\tat com.android.server.pm.PackageManagerService.setEnabledSettings(PackageManagerService.java:3904)\n'
+    } >&2
+    exit 255
   fi
   if ! ignored "$pkg"; then
     read -r state kind < "$tv/packages/$pkg"
     printf '%s %s\n' "$new" "$kind" > "$tv/packages/$pkg"
+    # Disabling a package stops it.
+    [ "$new" = enabled ] || rm -f "$tv/processes/$pkg"
   fi
   echo "Package $pkg new state: $new"
 }
@@ -179,7 +187,7 @@ uninstall() {
   local pkg=${1-}
   [ -f "$tv/packages/$pkg" ] || die "Failure [DELETE_FAILED_INTERNAL_ERROR]"
   if ! ignored "$pkg"; then
-    rm -f "$tv/packages/$pkg"
+    rm -f "$tv/packages/$pkg" "$tv/processes/$pkg"
     rm -rf "$tv/sdcard/Android/data/$pkg"
     grep -v "^$pkg/" "$tv/home-activities" > "$tv/home-activities.new"
     mv "$tv/home-activities.new" "$tv/home-activities"
@@ -276,6 +284,31 @@ am_start() {
   echo "TotalTime: $total"
   echo "WaitTime: $((total + 8))"
   echo "Complete"
+}
+
+# dumpsys meminfo PACKAGE: the package's memory summary while it runs, as API 34 prints it
+# (shortened). processes/<package> holds its TOTAL PSS in kB; no file means it isn't running.
+dumpsys_meminfo() {
+  local pss
+  if [ ! -f "$tv/processes/$1" ]; then
+    echo "No process found for: $1"
+    return 0
+  fi
+  pss=$(cat "$tv/processes/$1")
+  echo "Applications Memory Usage (in Kilobytes):"
+  echo "Uptime: 86357 Realtime: 86357"
+  echo
+  echo "** MEMINFO in pid 924 [$1] **"
+  echo "                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap"
+  echo "                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free"
+  printf '        TOTAL %8s     2332     1856     6687   120076    19137    11609     2980\n' "$pss"
+  echo " "
+  echo " App Summary"
+  echo "                       Pss(KB)                        Rss(KB)"
+  echo "                        ------                         ------"
+  echo "           Java Heap:      876                          35388"
+  echo " "
+  printf '           TOTAL PSS: %8s            TOTAL RSS:   120076       TOTAL SWAP PSS:     6687\n' "$pss"
 }
 
 # --- Settings and properties -------------------------------------------------------------
@@ -426,6 +459,7 @@ case "$*" in
   "shell input keyevent"*) log write; need_device; keyevent "${4-}" ;;
   "shell dumpsys window") log read; need_device; dumpsys_window ;;
   "shell dumpsys window windows") log read; need_device; dumpsys_window_windows ;;
+  "shell dumpsys meminfo "*) log read; need_device; dumpsys_meminfo "$4" ;;
   "shell cat /proc/meminfo") log read; need_device; meminfo ;;
   "shell df -k /data") log read; need_device; df_data ;;
   # Starting Home to time it changes no stored state (packages, settings, the Home choice).

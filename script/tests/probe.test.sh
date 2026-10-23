@@ -44,6 +44,18 @@ test_probe_measures_available_memory_and_home_draw_time() {
   assert_output_contains "Home draw time:    1432 ms (cold start of com.google.android.apps.tv.launcherx/com.google.android.apps.tv.launcherx.home.HomeActivity)"
 }
 
+test_probe_measures_the_launchers_memory() {
+  run_fuego probe
+  assert_output_contains "Launcher memory:   not installed"
+  fake_tv_install_package io.github.danajerban.fuegoos user
+  run_fuego probe
+  assert_output_contains "Launcher memory:   not running"
+  fake_tv_process io.github.danajerban.fuegoos 17300
+  run_fuego probe
+  assert_status 0
+  assert_output_contains "Launcher memory:   16.9 MB (PSS)"
+}
+
 test_probe_says_when_there_is_no_home_to_time() {
   fake_tv_set_package_state com.google.android.apps.tv.launcherx disabled-user
   fake_tv_set_package_state com.google.android.tungsten.setupwraith disabled-user
