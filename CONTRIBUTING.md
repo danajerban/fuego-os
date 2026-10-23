@@ -22,7 +22,7 @@ Open an issue first, with the package name, what it does, the `probe` output tha
 
 ## Testing (planned)
 
-- **The script** runs against a fake TV: `probe`, `apply`, `apply` again, then `restore`, with checks on the fake TV's state and the script's report.
+- **The script** runs against a fake TV: `probe`, `apply`, `apply` again, then `restore`, with checks on the fake TV's state and the script's report. Run them with `script/tests/run` (plain bash, nothing to install), and check the script with `shellcheck script/fuego script/tests/*`. Every `adb` call goes through `FUEGO_ADB`, which the tests point at the fake TV (`script/tests/fake-adb`); the script must also run on the Mac's own bash 3.2.
 - **The Launcher** runs UI tests on an Android TV (API 34) emulator: Home, D-pad focus, tiles, Inputs, Settings, the Idle Screen.
 - **The real TV** is the only way to check casting, HDMI switching, Wi-Fi after the Home Takeover and the remote's Netflix and YouTube buttons. If you changed one of those and couldn't try it on a TV, say so in the pull request.
 
