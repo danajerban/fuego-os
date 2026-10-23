@@ -1,0 +1,401 @@
+#!/bin/bash
+# fuego: makes the TV fast and free of Bloat over adb, without root.
+# Runs on the Mac's own bash (3.2). See README.md and docs/tv-setup.md.
+
+set -u
+
+# The one boundary to the TV: every adb call goes through adb_call, which runs $FUEGO_ADB.
+# Tests point FUEGO_ADB at the fake TV (script/tests/fake-adb).
+FUEGO_ADB=${FUEGO_ADB:-adb}
+
+SETUP_DOC="https://github.com/danajerban/fuego-os/blob/main/docs/tv-setup.md"
+
+# The Android platform the Launcher builds against. Keep in step with the Launcher's compileSdk.
+LAUNCHER_SDK_PLATFORM=android-34
+LAUNCHER_BUILD_TOOLS=34.0.0
+
+usage() {
+  cat <<EOF
+Usage: fuego COMMAND
+
+Commands:
+  check [--build]          check the tools this Mac needs (--build: also those for building
+                           the Launcher yourself)
+  pair ADDRESS [CODE]      pair with the TV, using the address and code from the TV's
+                           "Pair device with pairing code" screen
+  connect ADDRESS          connect to the TV, using the "IP address & Port" from the TV's
+                           Wireless debugging screen
+  probe                    report the TV's chip, RAM, storage, Android build, every package
+                           with the lists it is on, and its available memory and Home draw
+                           time. Changes nothing (Home is restarted to time it)
+
+TV setup steps: $SETUP_DOC
+EOF
+}
+
+say() {
+  printf '%s\n' "$*"
+}
+
+die() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+adb_call() {
+  "$FUEGO_ADB" "$@"
+}
+
+# --- Tools on the Mac --------------------------------------------------------------------
+
+have_adb() {
+  command -v "$FUEGO_ADB" > /dev/null 2>&1
+}
+
+adb_install_hint() {
+  if [ "$FUEGO_ADB" != adb ]; then
+    say "  FUEGO_ADB is set to $FUEGO_ADB, which isn't there. Fix it, or unset it to use adb from PATH."
+  else
+    say "  Install it with Homebrew: brew install --cask android-platform-tools"
+    say "  or download Android SDK Platform-Tools: https://developer.android.com/tools/releases/platform-tools"
+  fi
+}
+
+require_adb() {
+  have_adb && return 0
+  {
+    say "adb: missing. fuego talks to the TV through adb."
+    adb_install_hint
+  } >&2
+  exit 1
+}
+
+sdk_dir() {
+  printf '%s\n' "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+}
+
+cmd_check() {
+  local build="" missing=0 sdk
+  case "${1-}" in
+    --build) build=1 ;;
+    "") ;;
+    *) usage >&2; exit 2 ;;
+  esac
+
+  if have_adb; then
+    say "adb: found ($(command -v "$FUEGO_ADB"))"
+  else
+    say "adb: missing"
+    adb_install_hint
+    missing=1
+  fi
+
+  if [ -n "$build" ]; then
+    sdk=$(sdk_dir)
+    if [ -n "$sdk" ] && [ -d "$sdk/platforms/$LAUNCHER_SDK_PLATFORM" ]; then
+      say "Android SDK: found ($sdk)"
+    else
+      say "Android SDK: missing (needed only to build the Launcher yourself)"
+      if [ -z "$sdk" ]; then
+        say "  brew install --cask android-commandlinetools"
+        say "  export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools"
+      fi
+      say "  sdkmanager \"platforms;$LAUNCHER_SDK_PLATFORM\" \"build-tools;$LAUNCHER_BUILD_TOOLS\""
+      missing=1
+    fi
+    if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+      say "JDK 17: found ($JAVA_HOME)"
+    else
+      say "JDK 17: missing (needed only to build the Launcher yourself)"
+      say "  brew install openjdk@17"
+      say "  export JAVA_HOME=/opt/homebrew/opt/openjdk@17"
+      missing=1
+    fi
+  fi
+
+  return "$missing"
+}
+
+# --- Pairing and connecting --------------------------------------------------------------
+
+WIRELESS_DEBUGGING="Settings > System > Developer options > Wireless debugging"
+
+# require_address COMMAND ADDRESS: stops unless ADDRESS looks like IP:PORT.
+require_address() {
+  case "$2" in
+    *[!0-9.:]* | :* | *: | *:*:* | "") ;;
+    *:*) return 0 ;;
+  esac
+  say "fuego $1 needs the TV's IP address and port, like 192.168.1.50:41234, as shown on the TV" >&2
+  say "under $WIRELESS_DEBUGGING." >&2
+  exit 2
+}
+
+# Printed whenever the TV can't be reached, so the owner always gets the way back.
+wireless_debugging_help() {
+  say "On the TV, open $WIRELESS_DEBUGGING and turn it on."
+  say "That screen shows the IP address & Port to use with: fuego connect IP:PORT"
+  say "The port changes each time Wireless debugging is turned on."
+  say "Step by step: $SETUP_DOC"
+}
+
+# require_tv: stops, with the way back, unless adb is there and the TV answers.
+# Every command that talks to a connected TV starts with it.
+require_tv() {
+  local output
+  require_adb
+  output=$(adb_call get-state 2>&1)
+  [ "$output" = device ] && return 0
+  {
+    say "Can't reach the TV ($output)."
+    say "Check that the TV is on and on the same network as this Mac, then connect again."
+    wireless_debugging_help
+  } >&2
+  exit 1
+}
+
+cmd_pair() {
+  local address=${1-} code=${2-} output
+  require_address pair "$address"
+  require_adb
+  if [ -z "$code" ]; then
+    printf 'Pairing code shown on the TV: ' >&2
+    read -r code || true
+    [ -n "$code" ] || die "No pairing code given."
+  fi
+
+  output=$(adb_call pair "$address" "$code" 2>&1)
+  case "$output" in
+    *"Successfully paired"*)
+      say "Paired with the TV at $address."
+      say "Now connect with the IP address & Port shown on the Wireless debugging screen"
+      say "(not the pairing port): fuego connect IP:PORT"
+      ;;
+    *"Wrong password"*)
+      {
+        say "The TV did not accept the pairing code. Each code works once, while the pairing"
+        say "dialog is open. Open \"Pair device with pairing code\" again and use the new code."
+      } >&2
+      exit 1
+      ;;
+    *)
+      {
+        say "Couldn't pair with the TV at $address ($output)."
+        say "Check the address and code on the TV's \"Pair device with pairing code\" dialog,"
+        say "and that the TV and this Mac are on the same network."
+        wireless_debugging_help
+      } >&2
+      exit 1
+      ;;
+  esac
+}
+
+# adb connect reports failures on its output, not always in its exit status.
+cmd_connect() {
+  local address=${1-} output
+  require_address connect "$address"
+  require_adb
+
+  output=$(adb_call connect "$address" 2>&1)
+  case "$output" in
+    "connected to "* | "already connected to "*)
+      say "Connected to the TV at $address."
+      return 0
+      ;;
+  esac
+  {
+    case "$output" in
+      *"Connection refused"*)
+        say "The TV at $address refused the connection."
+        say "A TV restart turns Wireless debugging off, and turning it back on changes the port."
+        ;;
+      *"authenticate"*)
+        say "This Mac isn't paired with the TV at $address. Pair first: fuego pair IP:PORT"
+        say "(the address and code are on the TV's \"Pair device with pairing code\" dialog)."
+        ;;
+      *)
+        say "Can't reach the TV at $address ($output)."
+        say "Check that the TV is on and on the same network as this Mac."
+        ;;
+    esac
+    wireless_debugging_help
+  } >&2
+  exit 1
+}
+
+# --- Probe -------------------------------------------------------------------------------
+
+# prop NAME: a value from $PROPS, the TV's `getprop` output ("[name]: [value]" lines).
+prop() {
+  printf '%s\n' "$PROPS" | sed -n "s/^\[${1//./\\.}\]: \[\(.*\)\]\$/\1/p"
+}
+
+# meminfo_kb FIELD: a field of the kernel's memory report, in kB.
+meminfo_kb() {
+  adb_call shell cat /proc/meminfo | sed -n "s/^$1: *\([0-9]*\) kB\$/\1/p"
+}
+
+# gb KB: a size in kB as gigabytes with one decimal.
+gb() {
+  awk -v kb="$1" 'BEGIN { printf "%.1f GB", kb / 1048576 }'
+}
+
+print_facts() {
+  local chip details="" storage
+  PROPS=$(adb_call shell getprop)
+  chip="$(prop ro.soc.manufacturer) $(prop ro.soc.model)"
+  [ -n "$(prop ro.board.platform)" ] && details="board $(prop ro.board.platform)"
+  [ -n "$(prop ro.hardware)" ] && details="${details:+$details, }hardware $(prop ro.hardware)"
+  [ "$chip" = " " ] && chip=unknown
+  storage=$(adb_call shell df -k /data | awk 'NR == 2 { print $2, $4 }')
+
+  say "TV"
+  say "  Model:    $(prop ro.product.model) ($(prop ro.product.device))"
+  say "  Chip:     ${chip# }${details:+ ($details)}"
+  say "  RAM:      $(($(meminfo_kb MemTotal) / 1024)) MB"
+  say "  Storage:  $(gb "${storage#* }") free of $(gb "${storage% *}")"
+  say "  Android:  $(prop ro.build.version.release) (build $(prop ro.build.id))"
+}
+
+# --- Package lists -----------------------------------------------------------------------
+
+LISTS_DIR="$(dirname "$0")/../lists"
+
+# listed FILE: the package IDs on one list (format: lists/README.md).
+listed() {
+  sed -e '/^#/d' -e '/^[[:space:]]*$/d' -e 's/|.*//' "$LISTS_DIR/$1"
+}
+
+# load_lists: reads the four package lists into KEEP_LIST, MUST_KEEP_LIST, KNOWN_BLOAT_LIST and
+# TAKEOVER_PACKAGES, one package ID per line.
+load_lists() {
+  local file
+  for file in keep.txt must-keep.txt known-bloat.txt takeover.txt; do
+    [ -f "$LISTS_DIR/$file" ] || die "Can't find the package list $LISTS_DIR/$file."
+  done
+  KEEP_LIST=$(listed keep.txt)
+  MUST_KEEP_LIST=$(listed must-keep.txt)
+  KNOWN_BLOAT_LIST=$(listed known-bloat.txt)
+  TAKEOVER_PACKAGES=$(listed takeover.txt)
+}
+
+# contains LINES WORD: whether WORD is one of the newline-separated LINES.
+contains() {
+  case "
+$1
+" in
+    *"
+$2
+"*) return 0 ;;
+  esac
+  return 1
+}
+
+# --- Probe -------------------------------------------------------------------------------
+
+# tv_packages [FLAGS]: the installed packages (pm list packages FLAGS), sorted.
+tv_packages() {
+  adb_call shell pm list packages "$@" | sed -n 's/^package://p' | sort
+}
+
+# list_names PACKAGE: the names of the lists PACKAGE is on, comma-separated; empty when none.
+list_names() {
+  local names=""
+  contains "$KEEP_LIST" "$1" && names="Keep List"
+  contains "$MUST_KEEP_LIST" "$1" && names="${names:+$names, }Must-Keep List"
+  contains "$KNOWN_BLOAT_LIST" "$1" && names="${names:+$names, }Known-Bloat List"
+  contains "$TAKEOVER_PACKAGES" "$1" && names="${names:+$names, }Takeover Packages"
+  printf '%s\n' "$names"
+}
+
+print_packages() {
+  local installed disabled pkg names state unlisted=""
+  installed=$(tv_packages)
+  disabled=$(tv_packages -d)
+
+  say "Packages ($(count "$installed") installed, $(count "$disabled") disabled)"
+  for pkg in $installed; do
+    names=$(list_names "$pkg")
+    state=""
+    contains "$disabled" "$pkg" && state=disabled
+    [ -z "$names" ] && unlisted="$unlisted$pkg${state:+ ($state)}
+"
+    printf '  %-48s %s\n' "$pkg" "${names:-unlisted}${state:+, $state}"
+  done
+
+  say
+  say "Unlisted packages ($(count "$unlisted")): on none of the lists. fuego never disables them;"
+  say "review each one for the Known-Bloat List (lists/README.md)."
+  printf '%s' "$unlisted" | sed 's/^/  /'
+}
+
+# count LINES: the number of non-empty lines.
+count() {
+  printf '%s' "$1" | grep -c .
+}
+
+# --- Measurements ------------------------------------------------------------------------
+
+# home_activity: the activity the Home button opens now. Fails when no app answers it.
+home_activity() {
+  local home
+  home=$(adb_call shell cmd package resolve-activity --brief \
+    -a android.intent.action.MAIN -c android.intent.category.HOME | tail -n 1)
+  case "$home" in
+    */*) printf '%s\n' "$home" ;;
+    *) return 1 ;;
+  esac
+}
+
+# print_measurements: the baseline numbers, one indented line each. probe prints them; apply
+# prints them before and after its changes.
+# Available memory is the kernel's MemAvailable. Home draw time is the activity manager's
+# TotalTime for a cold start of the Home activity (am start -W -S), so runs compare like for like.
+print_measurements() {
+  local home timing total
+  say "  Available memory:  $(($(meminfo_kb MemAvailable) / 1024)) MB"
+  if ! home=$(home_activity); then
+    say "  Home draw time:    not measured (no app answers the Home button)"
+    return 0
+  fi
+  # The chooser belongs to the system ("android"), which must never be stopped.
+  if [ "${home%%/*}" = android ]; then
+    say "  Home draw time:    not measured (the TV asks which app to use as Home)"
+    return 0
+  fi
+  timing=$(adb_call shell am start -W -S -n "$home")
+  total=$(printf '%s\n' "$timing" | sed -n 's/^TotalTime: \([0-9]*\)$/\1/p')
+  if [ -n "$total" ]; then
+    say "  Home draw time:    $total ms (cold start of $home)"
+  else
+    say "  Home draw time:    not measured ($(printf '%s\n' "$timing" | tail -n 1))"
+  fi
+}
+
+cmd_probe() {
+  [ $# -eq 0 ] || { usage >&2; exit 2; }
+  load_lists
+  require_tv
+  print_facts
+  say
+  print_packages
+  say
+  say "Measurements"
+  print_measurements
+}
+
+main() {
+  local command=${1-}
+  [ $# -gt 0 ] && shift
+  case "$command" in
+    check) cmd_check "$@" ;;
+    probe) cmd_probe "$@" ;;
+    pair) cmd_pair "$@" ;;
+    connect) cmd_connect "$@" ;;
+    help | -h | --help) usage ;;
+    "") usage >&2; exit 2 ;;
+    *) say "Unknown command: $command" >&2; usage >&2; exit 2 ;;
+  esac
+}
+
+main "$@"

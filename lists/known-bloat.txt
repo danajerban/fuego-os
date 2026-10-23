@@ -1,0 +1,10 @@
+# Known-Bloat List: the reviewed Bloat that Debloat disables. Nothing else is disabled.
+# Never list a Must-Keep package or a Takeover Package here (lists/check.sh enforces it).
+# To propose an entry, see lists/README.md.
+# Format: package|confirmed_on_tv|reason  (see lists/README.md)
+# From research (docs/research/), confirm each entry with probe.
+com.google.android.tvrecommendations|false|TV recommendations: fills the Stock Launcher's rows, unused once the Launcher is Home
+com.google.android.katniss|false|Voice search (Katniss): the owner does not use voice, the remote's mic button stops working
+# Live Channels: the research notes don't name its package; the ID is from general knowledge.
+# Not com.android.tv, which some TVs use for HDMI inputs.
+com.google.android.tv|false|Live Channels: the owner watches through apps and HDMI, not broadcast channels
