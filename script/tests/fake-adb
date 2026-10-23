@@ -510,6 +510,12 @@ record() {
 }
 trap record EXIT
 
+# Like adb, the fake reads whatever is waiting on its input, so a script that lets adb have the
+# owner's input loses their answers. (The test runner gives every test an empty input.)
+if ! inspecting && [ ! -t 0 ]; then
+  cat > /dev/null
+fi
+
 call="$*"
 serial=""
 if [ "${1-}" = "-s" ]; then

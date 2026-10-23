@@ -56,8 +56,9 @@ die() {
   exit 1
 }
 
+# adb reads whatever waits on its input; it gets none, so the owner's answers stay for the script.
 adb_call() {
-  "$FUEGO_ADB" "$@"
+  "$FUEGO_ADB" "$@" < /dev/null
 }
 
 # --- Tools on the Mac --------------------------------------------------------------------

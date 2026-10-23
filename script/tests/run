@@ -38,7 +38,7 @@ for file in "$TESTS"/*.test.sh; do
     TEST_DIR="$run_root/$name"
     mkdir -p "$TEST_DIR"
     if output=$(
-      exec 2>&1
+      exec 2>&1 < /dev/null
       export TEST_DIR
       # shellcheck source=script/tests/lib.sh
       . "$TESTS/lib.sh"
