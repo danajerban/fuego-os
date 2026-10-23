@@ -8,7 +8,7 @@ import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RadialGradient
-import android.graphics.RenderNode
+import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.Choreographer
@@ -21,8 +21,10 @@ import kotlin.math.sin
 /**
  * Ember, the Launcher's own artwork when the Artwork Folder has no pictures: a dark plum ramp from the
  * top-left to the bottom-right, with three soft glows on top (purple, crimson, orange). Home shows it
- * still ([StillEmber]); the Idle Screen shows it slowly moving ([EmberView]). Both draw it here, so they
- * can't drift apart.
+ * still ([StillEmber]); the Idle Screen shows it slowly moving ([EmberView]). Both take every colour,
+ * place, size and drift from this one definition: Home through Canvas gradients drawn on the CPU, the Idle
+ * Screen through one GPU shader ([movingShader]). The UI tests check both against the same reference
+ * colours.
  *
  * Positions are fractions of the screen's width and height; radii are in screen heights, so the glows
  * are round. Each glow's colour is laid over what is below it with alpha `k * exp(-(d/r)^2)`, d being
@@ -47,12 +49,10 @@ class Ember(private val width: Int, private val height: Int) {
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), base)
         val seconds = timeMs / 1000.0
         GLOWS.forEachIndexed { i, glow ->
-            val x = (glow.x + glow.driftX * wave(seconds, glow.periodX)) * width
-            val y = (glow.y + glow.driftY * wave(seconds, glow.periodY)) * height
-            val scale = 1 + BREATH * wave(seconds, glow.periodBreath)
+            val scale = glow.scaleAt(seconds)
             canvas.save()
-            canvas.translate(x.toFloat(), y.toFloat())
-            canvas.scale(scale.toFloat(), scale.toFloat())
+            canvas.translate(glow.xAt(seconds) * width, glow.yAt(seconds) * height)
+            canvas.scale(scale, scale)
             canvas.drawCircle(0f, 0f, glow.radius * REACH * height, glowPaints[i])
             canvas.restore()
         }
@@ -63,6 +63,14 @@ class Ember(private val width: Int, private val height: Int) {
         val colour: Int, val x: Float, val y: Float, val radius: Float, val strength: Float,
         val driftX: Float, val periodX: Double, val driftY: Float, val periodY: Double, val periodBreath: Double,
     ) {
+        /** Where the glow's centre is [seconds] after Ember started moving, as fractions of the screen. */
+        fun xAt(seconds: Double) = (x + driftX * wave(seconds, periodX)).toFloat()
+
+        fun yAt(seconds: Double) = (y + driftY * wave(seconds, periodY)).toFloat()
+
+        /** How much bigger than [radius] the glow is then, as it breathes. */
+        fun scaleAt(seconds: Double) = (1 + BREATH * wave(seconds, periodBreath)).toFloat()
+
         /** The glow's colour at [STOPS] even steps from its centre out to [REACH] radii, where it is gone. */
         fun falloff() = IntArray(STOPS) { i ->
             val d = REACH * i / (STOPS - 1)
@@ -73,8 +81,8 @@ class Ember(private val width: Int, private val height: Int) {
 
     companion object {
         /**
-         * How many times smaller than the screen Ember is drawn before it is stretched over it, on Home and
-         * on the Idle Screen alike. Its softest detail spans hundreds of pixels, so the stretch loses nothing.
+         * How many times smaller than the screen Home's Ember is drawn before it is stretched over it. Its
+         * softest detail spans hundreds of pixels, so the stretch loses nothing.
          */
         const val SHRINK = 4
 
@@ -111,6 +119,67 @@ class Ember(private val width: Int, private val height: Int) {
         }
 
         private fun mix(from: Int, to: Int, s: Float) = (from + (to - from) * s).roundToInt()
+
+        /**
+         * Ember as one GPU shader, for drawing it moving at full size: the same ramp and glows, worked out
+         * exactly for every pixel, with its numbers set by [placeShader] from this definition. Before the
+         * colour is rounded to 8 bits it gets up to a level of random dither either way, twice what one
+         * screen needs, so it still dithers under the Idle Screen's half-black veil. Skia's own dither on
+         * the GPU is an ordered pattern that shows as streaks in these dark purples; this one is noise.
+         */
+        fun movingShader() = RuntimeShader(MOVING).apply {
+            setFloatUniform("topLeft", Color.red(TOP_LEFT) / 255f, Color.green(TOP_LEFT) / 255f, Color.blue(TOP_LEFT) / 255f)
+            setFloatUniform("bottomRight", Color.red(BOTTOM_RIGHT) / 255f, Color.green(BOTTOM_RIGHT) / 255f, Color.blue(BOTTOM_RIGHT) / 255f)
+            GLOWS.forEachIndexed { i, glow ->
+                setFloatUniform("colour$i", Color.red(glow.colour) / 255f, Color.green(glow.colour) / 255f, Color.blue(glow.colour) / 255f)
+            }
+        }
+
+        /** Sets [shader], from [movingShader], to draw Ember over [width] by [height] as it is [timeMs] in. */
+        fun placeShader(shader: RuntimeShader, width: Int, height: Int, timeMs: Long) {
+            val seconds = timeMs / 1000.0
+            shader.setFloatUniform("size", width.toFloat(), height.toFloat())
+            GLOWS.forEachIndexed { i, glow ->
+                shader.setFloatUniform("glow$i", glow.xAt(seconds), glow.yAt(seconds), glow.radius * glow.scaleAt(seconds), glow.strength)
+            }
+        }
+
+        private val MOVING = """
+            uniform float2 size;
+            uniform float3 topLeft;
+            uniform float3 bottomRight;
+            // Each glow: its centre (fractions of the screen), radius (screen heights) and strength.
+            uniform float4 glow0;
+            uniform float4 glow1;
+            uniform float4 glow2;
+            uniform float3 colour0;
+            uniform float3 colour1;
+            uniform float3 colour2;
+
+            float3 over(float3 below, float2 uv, float aspect, float4 glow, float3 colour) {
+                float2 d = float2((uv.x - glow.x) * aspect, uv.y - glow.y) / glow.z;
+                return mix(below, colour, glow.w * exp(-dot(d, d)));
+            }
+
+            // White noise in [0, 1) from a pixel's position (Dave Hoskins' hash12, no sine).
+            float noise(float2 p) {
+                float3 p3 = fract(p.xyx * 0.1031);
+                p3 += dot(p3, p3.yzx + 33.33);
+                return fract((p3.x + p3.y) * p3.z);
+            }
+
+            half4 main(float2 p) {
+                float2 uv = p / size;
+                float t = clamp((uv.x + uv.y) * 0.5, 0.0, 1.0);
+                float3 c = mix(topLeft, bottomRight, t * t * (3.0 - 2.0 * t));
+                float aspect = size.x / size.y;
+                c = over(c, uv, aspect, glow0, colour0);
+                c = over(c, uv, aspect, glow1, colour1);
+                c = over(c, uv, aspect, glow2, colour2);
+                c += (noise(p) * 2.0 - 1.0) / 255.0;
+                return half4(half3(c), 1.0);
+            }
+        """.trimIndent()
     }
 }
 
@@ -139,14 +208,12 @@ object StillEmber : Picture {
  * Ember moving: the Idle Screen's artwork when the Artwork Folder is empty. The glows drift on slow loops
  * and breathe, timed by a clock, so nothing on screen ever stands still.
  *
- * It redraws about 30 times a second while started, cheaply: Ember is drawn at a [Ember.SHRINK]th of the
- * view's width and height into a GPU layer that is kept from frame to frame, and the layer is stretched
- * over the view with filtering. Each frame costs four gradient fills over a sixteenth of the screen and
- * one full-screen copy; no bitmap, no blur.
+ * It redraws about 30 times a second while started, cheaply: each frame is one full-screen pass of
+ * [Ember.movingShader], dithered pixel for pixel; no bitmap, no layer, no blur.
  */
 class EmberView(context: Context, attrs: AttributeSet?) : View(context, attrs), Choreographer.FrameCallback {
-    private val frame = RenderNode("ember").apply { setUseCompositingLayer(true, null) }
-    private var ember: Ember? = null
+    private val shader = Ember.movingShader()
+    private val paint = Paint().also { it.shader = shader }
     private var now: (() -> Long)? = null
     private var startedAt = 0L
     private var timeMs = 0L
@@ -180,22 +247,11 @@ class EmberView(context: Context, attrs: AttributeSet?) : View(context, attrs), 
         Choreographer.getInstance().postFrameCallback(this)
     }
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        val layerWidth = Ember.shrunk(w)
-        val layerHeight = Ember.shrunk(h)
-        frame.setPosition(0, 0, layerWidth, layerHeight)
-        ember = if (w > 0 && h > 0) Ember(layerWidth, layerHeight) else null
-    }
-
     override fun onDraw(canvas: Canvas) {
-        val ember = ember ?: return
+        if (width == 0 || height == 0) return
         now?.let { timeMs = it() - startedAt }
-        ember.draw(frame.beginRecording(), timeMs)
-        frame.endRecording()
-        canvas.save()
-        canvas.scale(Ember.SHRINK.toFloat(), Ember.SHRINK.toFloat())
-        canvas.drawRenderNode(frame)
-        canvas.restore()
+        Ember.placeShader(shader, width, height, timeMs)
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
     }
 
     override fun onDetachedFromWindow() {
