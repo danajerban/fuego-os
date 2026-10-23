@@ -9,7 +9,7 @@ import kotlin.math.roundToInt
 
 /**
  * Which artwork to show, for Home and the Idle Screen alike: the owner's JPEG and PNG pictures in the
- * artwork folder (`getExternalFilesDir("artwork")`) when there are any, else the bundled set. Each call
+ * Artwork Folder (`getExternalFilesDir("artwork")`) when there are any, else the bundled set. Each call
  * to [next] moves one picture on, in name order, round and round; the place is kept across restarts.
  *
  * It reads storage, so call it off the main thread.

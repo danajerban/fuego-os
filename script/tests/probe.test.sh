@@ -41,7 +41,7 @@ test_probe_measures_available_memory_and_home_draw_time() {
   run_fuego probe
   assert_status 0
   assert_output_contains "Available memory:  640 MB"
-  assert_output_contains "Home draw time:    1432 ms (cold start of com.google.android.apps.tv.launcherx/.home.HomeActivity)"
+  assert_output_contains "Home Draw Time:    1432 ms (cold start of com.google.android.apps.tv.launcherx/.home.HomeActivity)"
 }
 
 test_probe_measures_the_launchers_memory() {
@@ -61,7 +61,7 @@ test_probe_says_when_there_is_no_home_to_time() {
   fake_tv_set_package_state com.google.android.tungsten.setupwraith disabled-user
   run_fuego probe
   assert_status 0
-  assert_output_contains "Home draw time:    not measured (no app answers the Home button)"
+  assert_output_contains "Home Draw Time:    not measured (no app answers the Home button)"
 }
 
 test_probe_does_not_time_the_home_chooser() {
@@ -69,7 +69,7 @@ test_probe_does_not_time_the_home_chooser() {
   fake_tv_home_activity com.other.launcher/.Home 2
   run_fuego probe
   assert_status 0
-  assert_output_contains "Home draw time:    not measured (the TV asks which app to use as Home)"
+  assert_output_contains "Home Draw Time:    not measured (the TV asks which app to use as Home)"
   if fake_tv_calls | grep -q "am start"; then
     fail "probe started the Home chooser: $(fake_tv_calls | grep "am start")"
   fi

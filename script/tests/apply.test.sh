@@ -194,7 +194,7 @@ test_apply_prints_measurements_before_and_after() {
     "available memory lines"
   assert_equals "Before
 After" "$(printf '%s\n' "$OUTPUT" | grep -e '^Before$' -e '^After$')" "measurement headings"
-  assert_output_contains "Home draw time:    1432 ms"
+  assert_output_contains "Home Draw Time:    1432 ms"
 }
 
 test_apply_sets_animation_scales_to_half_and_no_other_setting() {

@@ -35,7 +35,7 @@ Commands:
                            Wireless debugging screen
   probe                    report the TV's chip, RAM, storage, Android build, every package
                            with the lists it is on, and its available memory, Launcher memory
-                           and Home draw time. Changes nothing (Home is restarted to time it)
+                           and Home Draw Time. Changes nothing (Home is restarted to time it)
   apply [--dry-run] [--skip-checks] [--launcher APK] [--pictures FOLDER]
                            save the Snapshot (first run only), disable the Known-Bloat List,
                            set animation scales to 0.5, install the Launcher, make it what Home
@@ -328,7 +328,7 @@ $2
   return 1
 }
 
-# --- Probe -------------------------------------------------------------------------------
+# --- Packages on the TV ------------------------------------------------------------------
 
 # tv_packages [FLAGS]: the installed packages (pm list packages FLAGS), sorted.
 tv_packages() {
@@ -418,27 +418,27 @@ launcher_memory() {
 # print_measurements: the baseline numbers, one indented line each. probe prints them; apply
 # prints them before and after its changes.
 # Available memory is the kernel's MemAvailable. Launcher memory is measured before Home is
-# timed, which restarts Home. Home draw time is the activity manager's TotalTime for a cold start
+# timed, which restarts Home. Home Draw Time is the activity manager's TotalTime for a cold start
 # of the Home activity (am start -W -S), so runs compare like for like.
 print_measurements() {
   local home timing total
   say "  Available memory:  $(($(meminfo_kb MemAvailable) / 1024)) MB"
   say "  Launcher memory:   $(launcher_memory)"
   if ! home=$(home_activity); then
-    say "  Home draw time:    not measured (no app answers the Home button)"
+    say "  Home Draw Time:    not measured (no app answers the Home button)"
     return 0
   fi
   # The chooser belongs to the system ("android"), which must never be stopped.
   if [ "${home%%/*}" = android ]; then
-    say "  Home draw time:    not measured (the TV asks which app to use as Home)"
+    say "  Home Draw Time:    not measured (the TV asks which app to use as Home)"
     return 0
   fi
   timing=$(adb_call shell am start -W -S -n "$home")
   total=$(printf '%s\n' "$timing" | sed -n 's/^TotalTime: \([0-9]*\)$/\1/p')
   if [ -n "$total" ]; then
-    say "  Home draw time:    $total ms (cold start of $home)"
+    say "  Home Draw Time:    $total ms (cold start of $home)"
   else
-    say "  Home draw time:    not measured ($(printf '%s\n' "$timing" | tail -n 1))"
+    say "  Home Draw Time:    not measured ($(printf '%s\n' "$timing" | tail -n 1))"
   fi
 }
 
@@ -466,18 +466,25 @@ SKIPPED_COUNT=0
 CHANGED_COUNT=0
 FAILED_COUNT=0
 
-# outcome KIND TEXT: one report line, counted for the summary. KIND is one of: disabled,
-# "already off", skipped, changed, installed, uninstalled, unchanged, failed, checked (a check
-# that passed), recorded (an owner's answer), "not done" (a step left out), or "would ..." in a
-# dry run.
+# outcome KIND TEXT: one report line, counted for the summary. The kinds, by how they count:
+#   disabled:     disabled, "would disable"
+#   already off:  "already off"
+#   skipped:      skipped (a listed package left alone, or a file that is not a picture)
+#   failed:       failed
+#   changed:      enabled, changed, installed, uninstalled, copied, and in a dry run
+#                 "would enable", "would set", "would install", "would copy"
+#   not counted:  unchanged, checked (a check that passed), recorded (an owner's answer),
+#                 "not done" (a step left out), and in a dry run "would ask", "would check"
 outcome() {
   case "$1" in
     disabled | "would disable") DISABLED_COUNT=$((DISABLED_COUNT + 1)) ;;
     "already off") ALREADY_COUNT=$((ALREADY_COUNT + 1)) ;;
     skipped) SKIPPED_COUNT=$((SKIPPED_COUNT + 1)) ;;
     failed) FAILED_COUNT=$((FAILED_COUNT + 1)) ;;
+    enabled | changed | installed | uninstalled | copied | "would enable" | "would set" | \
+      "would install" | "would copy") CHANGED_COUNT=$((CHANGED_COUNT + 1)) ;;
     unchanged | checked | recorded | "not done" | "would ask" | "would check") ;;
-    *) CHANGED_COUNT=$((CHANGED_COUNT + 1)) ;;
+    *) die "fuego: unknown outcome kind \"$1\" (a bug in fuego)" ;;
   esac
   printf '  %-12s %s\n' "$1" "$2"
 }
@@ -702,7 +709,7 @@ ANIMATION_SCALES="window_animation_scale transition_animation_scale animator_dur
 
 apply_speed_settings() {
   local key
-  say "Speed settings"
+  say "Speed Settings"
   for key in $ANIMATION_SCALES; do
     set_setting global "$key" 0.5
   done
@@ -863,8 +870,8 @@ owner_types_yes() {
   [ "$answer" = yes ]
 }
 
-# owner_says_yes: the Wi-Fi warning, then the owner's answer. Only "yes" goes on.
-owner_says_yes() {
+# owner_accepts_wifi_warning: the Wi-Fi warning, then the owner's answer. Only "yes" goes on.
+owner_accepts_wifi_warning() {
   say "  Disabling the setup wizard can delete the Wi-Fi network saved during the TV's setup. If the"
   say "  TV leaves the network, join it again on the TV in Settings > Network & Internet."
   owner_types_yes "Type yes to disable the Takeover Packages"
@@ -890,6 +897,9 @@ focused_app() {
 # How many times to look for the Launcher's focus after a Home press, a second apart. A cold start
 # of the Launcher on an API 34 emulator takes more than two seconds.
 FOCUS_CHECKS=10
+
+# How many times to look for the Artwork Folder after starting the Launcher, a second apart.
+ARTWORK_FOLDER_CHECKS=10
 
 # home_press_opens_launcher: presses Home and waits for the Launcher to have focus. Sets FOCUS to
 # what had focus last. Fails when the Launcher never gets it.
@@ -995,7 +1005,7 @@ apply_home_takeover() {
   if [ -n "$on" ]; then
     if [ -n "$DRY_RUN" ]; then
       outcome "would ask" "the owner's yes to the Wi-Fi warning"
-    elif ! owner_says_yes; then
+    elif ! owner_accepts_wifi_warning; then
       outcome "not done" "Home Takeover: no yes from the owner, so the Takeover Packages stay on"
       return 0
     fi
@@ -1075,7 +1085,7 @@ artwork_folder_ready() {
   say "  Starting the Launcher once, so it makes its Artwork Folder."
   adb_call shell am start -W -n "$LAUNCHER_HOME" > /dev/null 2>&1
   until adb_call shell ls "$ARTWORK_FOLDER" > /dev/null 2>&1; do
-    [ "$check" -ge "$FOCUS_CHECKS" ] && return 1
+    [ "$check" -ge "$ARTWORK_FOLDER_CHECKS" ] && return 1
     check=$((check + 1))
     sleep 1
   done
