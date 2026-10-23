@@ -86,10 +86,14 @@ abstract class CheckLauncherManifest : DefaultTask() {
     }
 }
 
-/** Copies the fake Dock apps' APKs into a folder the UI tests ship as assets. */
+/** Copies the fake Dock apps' release APKs into a folder the UI tests ship as assets. */
 abstract class CollectFakeAppApks : DefaultTask() {
+    /**
+     * The fake app's APK output folder. It is searched when the task runs, not when the build is
+     * configured, so a configuration cached before the APKs existed still finds them.
+     */
     @get:InputFiles
-    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val apks: ConfigurableFileCollection
 
     @get:OutputDirectory
@@ -101,17 +105,14 @@ abstract class CollectFakeAppApks : DefaultTask() {
     @TaskAction
     fun collect() {
         files.sync {
-            from(apks)
+            from(apks.asFileTree.matching { include("*/release/*.apk") }.files)
             into(outputDir)
         }
     }
 }
 
 val fakeAppApks = tasks.register<CollectFakeAppApks>("collectFakeAppApks") {
-    apks.from(
-        project(":fakeapp").layout.buildDirectory.dir("outputs/apk")
-            .map { dir -> dir.asFileTree.matching { include("*/release/*.apk") }.files },
-    )
+    apks.from(project(":fakeapp").layout.buildDirectory.dir("outputs/apk"))
     apks.builtBy(":fakeapp:assembleRelease")
 }
 
