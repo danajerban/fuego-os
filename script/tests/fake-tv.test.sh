@@ -40,17 +40,11 @@ test_fake_tv_reads_build_facts() {
   assert_equals UKNV.260529.001 "$OUTPUT"
 }
 
-# A fake Launcher APK: the fake TV reads "package=" and "home=" lines from it.
-fake_launcher_apk() {
-  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\n' \
-    > "$TEST_DIR/launcher.apk"
-}
-
 # The expected outputs in the Home tests below are copied from an Android TV API 34 emulator,
 # whose Stock Launcher is com.google.android.tvlauncher (priority 2, like launcherx here).
 
 test_fake_tv_installs_an_apk_like_adb() {
-  fake_launcher_apk
+  launcher_apk > /dev/null
   adb_fake install -r "$TEST_DIR/launcher.apk"
   assert_status 0
   assert_equals "Performing Streamed Install
@@ -73,7 +67,7 @@ com.google.android.apps.tv.launcherx/.home.HomeActivity" "$OUTPUT"
 }
 
 test_fake_tv_set_home_activity_changes_nothing_while_the_stock_launcher_is_enabled() {
-  fake_launcher_apk
+  launcher_apk > /dev/null
   adb_fake install -r "$TEST_DIR/launcher.apk"
   adb_fake shell cmd package set-home-activity io.github.danajerban.fuegoos/.HomeActivity
   assert_status 0
@@ -88,7 +82,7 @@ test_fake_tv_set_home_activity_changes_nothing_while_the_stock_launcher_is_enabl
 }
 
 test_fake_tv_home_press_opens_the_chosen_home_once_the_takeover_packages_are_off() {
-  fake_launcher_apk
+  launcher_apk > /dev/null
   adb_fake install -r "$TEST_DIR/launcher.apk"
   adb_fake shell cmd package set-home-activity io.github.danajerban.fuegoos/.HomeActivity
   adb_fake shell pm disable-user --user 0 com.google.android.apps.tv.launcherx
@@ -124,7 +118,7 @@ test_fake_tv_refuses_a_home_activity_in_a_disabled_or_missing_package() {
 test_fake_tv_home_role_falls_back_when_its_holder_is_uninstalled() {
   adb_fake shell cmd role get-role-holders --user 0 android.app.role.HOME
   assert_equals com.google.android.apps.tv.launcherx "$OUTPUT"
-  fake_launcher_apk
+  launcher_apk > /dev/null
   adb_fake install -r "$TEST_DIR/launcher.apk"
   adb_fake shell cmd package set-home-activity io.github.danajerban.fuegoos/.HomeActivity
   adb_fake uninstall io.github.danajerban.fuegoos

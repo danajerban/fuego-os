@@ -29,6 +29,9 @@ echo "real adb called with: \$*" >> "$TEST_DIR/real-adb-calls"
 exit 99
 EOF
   chmod +x "$TEST_DIR/bin/adb"
+  # Waiting for the TV (after a Home press) takes no time in tests.
+  printf '#!/bin/sh\nexit 0\n' > "$TEST_DIR/bin/sleep"
+  chmod +x "$TEST_DIR/bin/sleep"
   export PATH="$TEST_DIR/bin:$PATH"
   export FUEGO_ADB="$TESTS/fake-adb"
   fake_tv_new
@@ -71,6 +74,14 @@ with_list_entry() {
     FUEGO="$TEST_DIR/repo/script/fuego"
   fi
   printf '%s\n' "$2" >> "$TEST_DIR/repo/lists/$1"
+}
+
+# launcher_apk: writes a fake Launcher APK (the fake TV reads its "package=" and "home=" lines)
+# and prints its path.
+launcher_apk() {
+  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\n' \
+    > "$TEST_DIR/launcher.apk"
+  echo "$TEST_DIR/launcher.apk"
 }
 
 # The Snapshot apply keeps on the Mac (HOME is the test's own).
