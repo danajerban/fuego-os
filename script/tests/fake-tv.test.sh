@@ -479,3 +479,63 @@ test_fake_tv_window_list_has_no_focus_lines() {
   adb_fake shell dumpsys window
   assert_output_contains "mCurrentFocus=Window{"
 }
+
+# The outputs in the device tests below are copied from adb 36 on macOS, with the TV connected by
+# fuego connect and listed a second time by adb's mDNS.
+
+test_fake_tv_is_listed_again_under_its_mdns_name() {
+  fake_tv_listed_by_mdns
+  adb_fake devices
+  assert_status 0
+  assert_equals "List of devices attached
+$FAKE_TV_ADDRESS	device
+$FAKE_TV_MDNS_SERIAL	device" "$OUTPUT"
+}
+
+test_fake_tv_after_a_restart_is_listed_under_its_mdns_name_only() {
+  fake_tv_listed_by_mdns
+  : > "$FAKE_TV/link/connected"
+  adb_fake devices
+  assert_equals "List of devices attached
+$FAKE_TV_MDNS_SERIAL	device" "$OUTPUT"
+  adb_fake get-state
+  assert_status 0
+  assert_equals device "$OUTPUT"
+}
+
+test_fake_tv_listed_twice_needs_a_serial() {
+  fake_tv_listed_by_mdns
+  adb_fake get-state
+  assert_status 1
+  assert_equals "error: more than one device/emulator" "$OUTPUT"
+  assert_equals "" "$("$FUEGO_ADB" get-state 2> /dev/null)" "standard output"
+  adb_fake shell getprop ro.build.id
+  assert_status 1
+  assert_equals "adb: more than one device/emulator" "$OUTPUT"
+  adb_fake push "$TESTS/lib.sh" /sdcard/lib.sh
+  assert_status 1
+  assert_equals "adb: error: failed to get feature set: more than one device/emulator" "$OUTPUT"
+  adb_fake -s "$FAKE_TV_ADDRESS" shell getprop ro.build.id
+  assert_status 0
+  assert_equals UKNV.260529.001 "$OUTPUT"
+  adb_fake -s "$FAKE_TV_MDNS_SERIAL" get-state
+  assert_status 0
+  assert_equals device "$OUTPUT"
+}
+
+test_fake_tv_refuses_a_serial_it_does_not_list() {
+  adb_fake -s nope get-state
+  assert_status 1
+  assert_equals "error: device 'nope' not found" "$OUTPUT"
+  assert_equals "" "$("$FUEGO_ADB" -s nope get-state 2> /dev/null)" "standard output"
+  adb_fake -s nope shell getprop ro.build.id
+  assert_status 1
+  assert_equals "adb: device 'nope' not found" "$OUTPUT"
+  adb_fake -s nope install -r "$(launcher_apk)"
+  assert_status 1
+  assert_equals "adb: device 'nope' not found" "$OUTPUT"
+  adb_fake -s nope push "$TESTS/lib.sh" /sdcard/lib.sh
+  assert_status 1
+  assert_equals "adb: error: failed to get feature set: device 'nope' not found" "$OUTPUT"
+  [ ! -e "$(fake_tv_sdcard_file lib.sh)" ] || fail "the push reached the TV"
+}

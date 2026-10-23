@@ -25,9 +25,15 @@
 #   app-folders/<package>  the folders an installed app makes under /sdcard/Android/data/<package>/
 #                          when it starts, one per line (from the fake APK's "folder=" lines)
 #   link/                  pairing and connection: pair-address, pairing-code, address,
-#                          paired (present once paired), connected (connected addresses)
+#                          paired (present once paired), connected (connected addresses),
+#                          mdns (absent: none): the name adb's mDNS also lists the TV under,
+#                          connected or not; `adb devices` lists it after the connected addresses
 #   faults/                misbehaviour, see fake_tv_fault in lib.sh
 #   calls                  every call, one per line: "read ARGS", "write ARGS" or "unsupported ARGS"
+#                          (ARGS without a leading "-s SERIAL")
+#
+# Like adb, a call to the TV with several devices listed needs -s SERIAL, and -s names a listed
+# device, or the call fails with adb's error.
 #
 # The script runs one plain command per `adb shell` (no pipes, quotes or redirects on the TV)
 # and filters output on the Mac, so the fake only needs to know each command, not a shell.
@@ -65,17 +71,34 @@ die() {
 
 # --- The link between the Mac and the TV -----------------------------------------------------
 
-connected() {
-  ! fault debugging-off && [ -s "$tv/link/connected" ]
+# listed: the serials `adb devices` lists, one per line: the connected addresses, then the mDNS
+# name. Wireless debugging off lists none.
+listed() {
+  fault debugging-off && return 0
+  cat "$tv/link/connected"
+  [ ! -f "$tv/link/mdns" ] || cat "$tv/link/mdns"
 }
 
 need_device() {
+  local serials
   inspecting && return 0
   fault offline && die "error: device offline"
-  connected || die "error: no devices/emulators found"
-  if [ -n "$serial" ] && ! grep -qxF "$serial" "$tv/link/connected"; then
-    die "error: device '$serial' not found"
+  serials=$(listed)
+  [ -n "$serials" ] || die "error: no devices/emulators found"
+  if [ -n "$serial" ]; then
+    printf '%s\n' "$serials" | grep -qxF "$serial" || device_error "device '$serial' not found"
+  elif [ "$(printf '%s\n' "$serials" | wc -l)" -gt 1 ]; then
+    device_error "more than one device/emulator"
   fi
+}
+
+# device_error MESSAGE: adb's answer when it can't pick the device, worded by the command.
+device_error() {
+  case "$command" in
+    get-state) die "error: $1" ;;
+    push) die "adb: error: failed to get feature set: $1" ;;
+    *) die "adb: $1" ;;
+  esac
 }
 
 pair() {
@@ -112,12 +135,11 @@ disconnect() {
 }
 
 devices() {
+  local address
   echo "List of devices attached"
-  if connected; then
-    while read -r address; do
-      if fault offline; then printf '%s\toffline\n' "$address"; else printf '%s\tdevice\n' "$address"; fi
-    done < "$tv/link/connected"
-  fi
+  listed | while read -r address; do
+    if fault offline; then printf '%s\toffline\n' "$address"; else printf '%s\tdevice\n' "$address"; fi
+  done
   echo
 }
 
@@ -677,6 +699,7 @@ if [ "${1-}" = "-s" ]; then
   shift 2
   call="$*"
 fi
+command=${1-}
 
 # adb joins the words after "shell" into one command line for the TV's shell.
 if [ "${1-}" = "shell" ]; then

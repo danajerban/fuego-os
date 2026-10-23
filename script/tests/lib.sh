@@ -23,9 +23,13 @@ FAKE_TV_HOST=192.168.1.50
 FAKE_TV_PAIR_ADDRESS="$FAKE_TV_HOST:37099"
 FAKE_TV_ADDRESS="$FAKE_TV_HOST:41234"
 FAKE_TV_PAIRING_CODE=482913
+# The name adb's mDNS also lists the TV under, made from the TV's pairing guid.
+FAKE_TV_MDNS_SERIAL=adb-GoogleTV8164-fake._adb-tls-connect._tcp
 
 test_setup() {
   export HOME="$TEST_DIR/mac"
+  # The owner's own choice of device (an emulator, say) must not reach the tests.
+  unset ANDROID_SERIAL
   mkdir -p "$HOME" "$TEST_DIR/bin"
   cat > "$TEST_DIR/bin/adb" <<EOF
 #!/bin/bash
@@ -119,6 +123,11 @@ snapshot_file() {
 # The Check Step's answers, kept beside the Snapshot.
 checks_file() {
   echo "$HOME/Library/Application Support/fuego-os/checks"
+}
+
+# The TV's address from the last fuego connect, kept beside the Snapshot.
+tv_address_file() {
+  echo "$HOME/Library/Application Support/fuego-os/tv-address"
 }
 
 # --- Assertions ----------------------------------------------------------------------------
@@ -228,6 +237,12 @@ EOF
 fake_tv_unpaired() {
   rm -f "$FAKE_TV/link/paired"
   : > "$FAKE_TV/link/connected"
+}
+
+# fake_tv_listed_by_mdns: adb's mDNS also lists the TV, under FAKE_TV_MDNS_SERIAL, as it does on
+# a paired Mac whether or not fuego connect has run.
+fake_tv_listed_by_mdns() {
+  echo "$FAKE_TV_MDNS_SERIAL" > "$FAKE_TV/link/mdns"
 }
 
 # fake_tv_install_package PACKAGE [system|user] [enabled|disabled-user|disabled]
