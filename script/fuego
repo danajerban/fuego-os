@@ -496,6 +496,91 @@ set_setting() {
   fi
 }
 
+# --- Snapshot ------------------------------------------------------------------------------
+
+# The Snapshot lives on the Mac, so it survives anything that happens to the TV.
+# FUEGO_STATE_DIR moves it (tests use their own).
+STATE_DIR=${FUEGO_STATE_DIR:-$HOME/Library/Application Support/fuego-os}
+SNAPSHOT="$STATE_DIR/snapshot"
+
+LAUNCHER_PACKAGE=io.github.danajerban.fuegoos
+
+# The screensaver and ambient-mode settings (secure), recorded for the Idle Screen.
+SCREENSAVER_SETTINGS="screensaver_components screensaver_enabled screensaver_activate_on_sleep
+screensaver_activate_on_dock"
+
+# snapshot_value KEY: a value from the Snapshot, whose lines are KEY=VALUE. Keys:
+#   taken                          when the Snapshot was taken
+#   package.<package>              enabled, disabled or missing, for every package on a list
+#   home                           the Home activity, or "none"
+#   setting.<namespace>.<key>      a setting's value, "null" when unset
+#   launcher                       installed or missing
+snapshot_value() {
+  awk -v key="$1=" 'index($0, key) == 1 { print substr($0, length(key) + 1); exit }' "$SNAPSHOT"
+}
+
+# snapshot_keys PREFIX: the Snapshot's keys starting with PREFIX, without it.
+snapshot_keys() {
+  awk -F= -v prefix="$1" 'index($1, prefix) == 1 { print substr($1, length(prefix) + 1) }' "$SNAPSHOT"
+}
+
+# listed_packages: every package on any of the lists, once each.
+listed_packages() {
+  printf '%s\n' "$KEEP_LIST" "$MUST_KEEP_LIST" "$KNOWN_BLOAT_LIST" "$TAKEOVER_PACKAGES" |
+    sed '/^$/d' | LC_ALL=C sort -u
+}
+
+# snapshot_fields: the Snapshot's KEY=VALUE lines, read from the TV now.
+snapshot_fields() {
+  local installed disabled pkg state key home
+  installed=$(tv_packages)
+  disabled=$(tv_packages -d)
+  for pkg in $(listed_packages); do
+    state=enabled
+    contains "$disabled" "$pkg" && state=disabled
+    contains "$installed" "$pkg" || state=missing
+    printf 'package.%s=%s\n' "$pkg" "$state"
+  done
+  home=$(home_activity) || home=none
+  printf 'home=%s\n' "$home"
+  for key in $ANIMATION_SCALES; do
+    printf 'setting.global.%s=%s\n' "$key" "$(setting global "$key")"
+  done
+  for key in $SCREENSAVER_SETTINGS; do
+    printf 'setting.secure.%s=%s\n' "$key" "$(setting secure "$key")"
+  done
+  if contains "$installed" "$LAUNCHER_PACKAGE"; then
+    echo launcher=installed
+  else
+    echo launcher=missing
+  fi
+}
+
+# take_snapshot: saves the Snapshot unless one exists, before apply changes anything. It is
+# written once and never overwritten, so a later run can't erase the way back. Stops on failure.
+take_snapshot() {
+  local fields
+  if [ -f "$SNAPSHOT" ]; then
+    say "Snapshot: kept from the first apply ($SNAPSHOT); it is never overwritten"
+    return 0
+  fi
+  if [ -n "$DRY_RUN" ]; then
+    say "Snapshot: would be saved to $SNAPSHOT"
+    return 0
+  fi
+  fields=$(snapshot_fields)
+  if ! mkdir -p "$STATE_DIR" 2> /dev/null || ! {
+    say "# fuego-os Snapshot: the TV as it was before apply first changed it."
+    say "# Written once and never overwritten. fuego restore puts the TV back to it."
+    say "taken=$(date '+%Y-%m-%d %H:%M')"
+    printf '%s\n' "$fields"
+  } 2> /dev/null > "$SNAPSHOT.new" || ! mv "$SNAPSHOT.new" "$SNAPSHOT"; then
+    rm -f "$SNAPSHOT.new" 2> /dev/null
+    die "Can't save the Snapshot to $SNAPSHOT, so nothing was changed on the TV."
+  fi
+  say "Snapshot: saved to $SNAPSHOT"
+}
+
 # --- Apply steps ---------------------------------------------------------------------------
 
 # Debloat: disables the Known-Bloat List, and nothing else. The Must-Keep List wins over it,
@@ -539,13 +624,32 @@ cmd_apply() {
   esac
   load_lists
   require_tv
+  if [ -n "$DRY_RUN" ]; then
+    say "Dry run: nothing is written to the TV or this Mac."
+  else
+    say "Before"
+    print_measurements
+  fi
+  say
+  take_snapshot
+  # The steps, in order. Each prints its outcomes and keeps going when one fails.
+  say
   apply_debloat
   say
   apply_speed_settings
   say
   print_unlisted "$(unlisted_packages)"
   say
-  say "Summary: $DISABLED_COUNT disabled, $SKIPPED_COUNT skipped, $ALREADY_COUNT already off, $FAILED_COUNT failed"
+  if [ -n "$DRY_RUN" ]; then
+    say "Summary (dry run): $DISABLED_COUNT to disable, $SKIPPED_COUNT skipped, $ALREADY_COUNT already off," \
+      "$FAILED_COUNT failed; $CHANGED_COUNT settings to change"
+  else
+    say "After"
+    print_measurements
+    say
+    say "Summary: $DISABLED_COUNT disabled, $SKIPPED_COUNT skipped, $ALREADY_COUNT already off," \
+      "$FAILED_COUNT failed; $CHANGED_COUNT settings changed"
+  fi
   [ "$FAILED_COUNT" -eq 0 ]
 }
 
