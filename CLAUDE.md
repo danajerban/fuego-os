@@ -59,7 +59,7 @@ adb -s $ANDROID_SERIAL wait-for-device   # then poll `adb shell getprop sys.boot
 adb -s emulator-<PORT> emu kill          # when done: your own port only
 ```
 
-The real TV is not connected to this Mac. Casting, HDMI switching, Wi-Fi after the takeover and the remote's buttons are checked only by the owner on the TV (ticket #14); say so when a change touches them.
+The owner's TV may be paired with this Mac over Wireless debugging, so `adb devices` lists it (possibly twice). Never run `adb` against it: always pass `-s` with your own emulator's serial, and never write to the TV without the owner's yes. Casting, HDMI switching, Wi-Fi after the takeover and the remote's buttons are checked only by the owner on the TV (casting, Wi-Fi and the remote's buttons were checked on 2026-10-23, ticket #14); say so when a change touches them.
 
 ## Tests
 

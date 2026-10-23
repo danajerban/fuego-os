@@ -26,7 +26,7 @@ com.google.android.katniss|false|Voice search (Katniss): the owner does not use 
 
 Lines starting with `#` and blank lines (empty, or only spaces and tabs) are ignored.
 
-Every entry starts as `false`: the IDs come from the research notes in `docs/research/` (or, where a comment says so, from general knowledge) and must be confirmed against `probe` output before the first release.
+An entry is `true` once `probe` on the Fuego 2K showed the package, and `false` until then (Spotify, for one, is not installed yet). The IDs come from the research notes in `docs/research/` (or, where a comment says so, from general knowledge).
 
 ## The check
 
