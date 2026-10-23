@@ -5,7 +5,7 @@ Each run of `launcher/measure_budgets.sh`, newest first. The budgets: the Dock d
 ## 2026-10-23: tv34 emulator (ticket #9)
 
 - **Device:** the `tv34` AVD (Android TV, API 34, `google/sdk_google_atv64_arm64/emu64a:14/UTT1.240131.001.F1/11825476`), 1920x1080, started with `-read-only -no-window -no-audio -no-snapshot` on an Apple silicon Mac shared with other work.
-- **Build:** the release build (`assembleRelease`, shrunk) of commit `d918fab`, signed with the debug key to install it. The Launcher was installed but not the TV's Home; the script times it with `am start -W -n .HomeActivity`, leaving Home for YouTube.
+- **Build:** the release build (`assembleRelease`, shrunk) of commit `d918fab`, signed with the debug key to install it. The Launcher was installed but not the TV's Home; `launcher/measure_budgets.sh` times it with `am start -W -n .HomeActivity`, leaving Home for YouTube.
 - **Runs:** 5.
 
 | Budget | Median | Worst | Runs | Budget |

@@ -36,7 +36,7 @@ There is no public firmware for this TV, and unlocking it would cost Netflix HD 
 
 You need a Mac and `adb` (`brew install --cask android-platform-tools`).
 
-1. **Download** `fuego-os-vX.Y.Z.tar.gz` and `SHA256SUMS` from the [latest release](https://github.com/danajerban/fuego-os/releases/latest), check the bundle and unpack it:
+1. **Download** (or, until a release is published, clone this repository and skip to `script/fuego check`) `fuego-os-vX.Y.Z.tar.gz` and `SHA256SUMS` from the [latest release](https://github.com/danajerban/fuego-os/releases/latest), check the bundle and unpack it:
 
    ```sh
    cd ~/Downloads
@@ -54,7 +54,7 @@ You need a Mac and `adb` (`brew install --cask android-platform-tools`).
    ```
 
 3. **Look before changing anything**: `script/fuego probe` reports the TV and every package with the lists it is on. Changes nothing.
-4. **Apply**: `script/fuego apply --dry-run` lists what would change; `script/fuego apply` saves the Snapshot, runs Debloat, sets the Speed Settings, installs the Launcher, takes over Home after your yes, sets the Launcher's Idle Screen as the screensaver and asks you to try casting, the HDMI inputs, Wi-Fi and the remote's buttons (`--skip-checks` leaves that for the next run). The Launcher APK comes from the latest release and is installed only if it matches its checksum in that release's `SHA256SUMS`; `--launcher APK` installs a local APK instead. `--pictures FOLDER` copies the JPEG and PNG pictures in a folder on your Mac to the TV as the Launcher's artwork; other files are skipped and listed.
+4. **Apply**: `script/fuego apply --dry-run` lists what would change; `script/fuego apply` saves the Snapshot, runs Debloat, sets the Speed Settings, installs the Launcher, takes over Home after your yes, sets the Launcher's Idle Screen as the screensaver and asks you to try casting, the HDMI inputs, Wi-Fi and the remote's buttons (`--skip-checks` leaves that for the next run). The Launcher APK comes from the latest release and is installed only if it matches its checksum in that release's `SHA256SUMS`; `--launcher APK` installs a local APK instead; until a release is published, build one with `./gradlew assembleDebug` in `launcher/` (JDK 17 and the Android SDK, see [CONTRIBUTING.md](CONTRIBUTING.md)) and pass `launcher/app/build/outputs/apk/debug/app-debug.apk` here. A local release build comes out unsigned, so Android won't install it. `--pictures FOLDER` copies the JPEG and PNG pictures in a folder on your Mac to the TV as the Launcher's artwork; other files are skipped and listed.
 5. **Undo**: `script/fuego restore` puts the TV back to the Snapshot (see [How to undo](#how-to-undo)).
 
 ## How to undo
