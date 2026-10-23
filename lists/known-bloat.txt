@@ -4,7 +4,22 @@
 # Format: package|confirmed_on_tv|reason  (see lists/README.md)
 # From research (docs/research/), confirm each entry with probe.
 com.google.android.tvrecommendations|false|TV recommendations: fills the Stock Launcher's rows, unused once the Launcher is Home
-com.google.android.katniss|false|Voice search (Katniss): the owner does not use voice, the remote's mic button stops working
+com.google.android.katniss|true|Voice search (Katniss): the owner does not use voice, the remote's mic button stops working
 # Live Channels: the research notes don't name its package; the ID is from general knowledge.
 # Not com.android.tv, which some TVs use for HDMI inputs.
 com.google.android.tv|false|Live Channels: the owner watches through apps and HDMI, not broadcast channels
+
+# Found on the Fuego 2K by probe (docs/research/fuego-2k-packages.md, ticket #14).
+tv.anoki.acr.anokiacroptin|true|Anoki ACR: recognises what is on screen for ad targeting, starts at boot and holds about 74 MB
+fusion.android.tv.demo|true|Store demo: wakes at boot and at every screen-on, unused at home
+com.google.android.feedback|true|Google Feedback: sends bug reports to Google, the TV runs without it
+com.expressluck.tvhelpmanual|true|TV help manual (Express Luck e-manual): a preinstalled app the owner does not open
+com.google.android.apps.tv.dreamx|true|Google's screensaver and ambient mode: the Idle Screen replaces it, about 230 MB while running
+com.mediatek.wwtv.mediaplayer|true|USB media player: the owner does not play files from USB, holds about 54 MB
+com.amazon.amazonvideo.livingroom|true|Prime Video: preinstalled, the owner does not use it
+com.disney.disneyplus|true|Disney+: preinstalled, the owner does not use it
+com.wbd.stream|true|Max: preinstalled, the owner does not use it
+com.iqiyi.i18n.tv|true|iQIYI: preinstalled, the owner does not use it
+com.google.android.youtube.tvmusic|true|YouTube Music: the owner listens on Spotify
+com.google.android.videos|true|Google TV app (film store and watchlist): feeds the Stock Launcher, which the Launcher replaces
+com.google.android.play.games|true|Play Games: the owner plays no games on the TV

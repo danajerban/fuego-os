@@ -1,19 +1,33 @@
 # Must-Keep List: never disabled, and it wins over every other list.
 # Format: package|confirmed_on_tv|reason  (see lists/README.md)
 # From research (docs/research/), confirm each entry with probe.
-com.google.android.gms|false|Google Play Services: YouTube sign-in, Netflix, DRM and casting need it
-com.google.android.gsf|false|Google Services Framework: Play Services needs it
-com.android.vending|false|Play Store: installs and updates the Keep List apps
-com.google.android.tv.remote.service|false|Remote service: disabling it breaks the remote
-com.android.location.fused|false|Fused location: a boot loop is reported when it is disabled
-com.google.android.apps.mediashell|false|Cast receiver: casting from a phone
-com.android.tv.settings|false|TV Settings: the Settings tile, Wi-Fi, and the way back to Wireless debugging
-com.google.android.tv.inputplayer|false|TV input player: opens the HDMI inputs
-# System updater: the package name varies by maker and is not known yet.
-# probe finds it; add it here before the first release.
+com.google.android.gms|true|Google Play Services: YouTube sign-in, Netflix, DRM, casting and the TV's system updates need it
+com.google.android.gsf|true|Google Services Framework: Play Services needs it
+com.android.vending|true|Play Store: installs and updates the Keep List apps
+com.google.android.tv.remote.service|true|Remote service: disabling it breaks the remote
+com.android.location.fused|true|Fused location: a boot loop is reported when it is disabled
+com.google.android.apps.mediashell|true|Cast receiver: casting from a phone
+com.android.tv.settings|true|TV Settings: the Settings tile, Wi-Fi, and the way back to Wireless debugging
+com.google.android.tv.inputplayer|true|TV input player: opens the HDMI inputs
+# System updater: on the Fuego 2K, Settings' System update opens
+# com.google.android.gms/.update.SystemUpdatePanoActivity, so Play Services above covers it.
+
+# The Fuego 2K's own TV stack, remote and system parts (docs/research/fuego-2k-packages.md).
+com.mediatek.wwtv.tvcenter|true|MediaTek TV center: source switching and the TV's picture and input menus, HDMI needs it
+com.mediatek.tvinput|true|MediaTek TV inputs: the HDMI input services the TV input player opens
+com.mediatek.tv.service|true|MediaTek TV service: the TV middleware the inputs and picture settings run on
+com.android.providers.tv|true|TV provider: stores the TV inputs the input player reads
+com.mediatek.hotkey.dispatcher|true|MediaTek hotkey dispatcher: routes the remote's app and input buttons
+com.mediatek.autopair|true|MediaTek remote auto-pairing: pairs the Bluetooth remote
+com.express.bt.autopair|true|Express Luck remote auto-pairing: pairs the Bluetooth remote
+com.android.bluetooth|true|Bluetooth: the remote connects over it
+com.google.android.inputmethod.latin|true|Gboard: the on-screen keyboard for search and sign-in
+com.google.android.webview|true|Android System WebView: sign-in pages inside apps need it
+com.android.shell|true|Shell: adb runs through it, so the script needs it
+com.express.at.factory.factorymanager|true|Factory manager: holds a fallback Home and runs in the background, its role unknown, so not safe to disable
 
 # The Keep List apps (keep.txt), repeated so the script reads one file.
-com.netflix.ninja|false|On the Keep List: Netflix
-com.google.android.youtube.tv|false|On the Keep List: YouTube
-com.stremio.one|false|On the Keep List: Stremio
+com.netflix.ninja|true|On the Keep List: Netflix
+com.google.android.youtube.tv|true|On the Keep List: YouTube
+com.stremio.one|true|On the Keep List: Stremio
 com.spotify.tv.android|false|On the Keep List: Spotify
