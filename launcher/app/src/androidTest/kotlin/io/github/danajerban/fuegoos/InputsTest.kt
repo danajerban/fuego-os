@@ -47,6 +47,26 @@ class InputsTest {
         assertEquals(null, tv.inputsMessage())
     }
 
+    @Test
+    fun showsTheNamesTheOwnerGaveInputs() {
+        tvInputs.connect()
+        tvInputs.name(FakeTvInputs.HDMI_2, "Set-top box")
+
+        openInputs()
+
+        assertEquals(listOf("HDMI 1", "Set-top box"), tv.inputNames())
+    }
+
+    @Test
+    fun leavesOutInputsTheOwnerHid() {
+        tvInputs.connect()
+        tvInputs.hide(FakeTvInputs.HDMI_1)
+
+        openInputs()
+
+        assertEquals(listOf("HDMI 2"), tv.inputNames())
+    }
+
     private fun openInputs() {
         tv.pressHome()
         tv.waitForApp(LAUNCHER)

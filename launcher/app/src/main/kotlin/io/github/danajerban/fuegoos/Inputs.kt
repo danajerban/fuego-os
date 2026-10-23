@@ -10,10 +10,10 @@ class HdmiInput(val name: CharSequence, val id: String)
 /**
  * The TV's HDMI ports, as the TV input framework lists them now, in input ID order (port order on TVs
  * that number their inputs). Devices behind a port (HDMI-CEC adds one per device) are left out: the
- * owner picks the port.
+ * owner picks the port. Names and hidden inputs follow what the owner set in TV Settings > Inputs.
  */
 fun hdmiInputs(context: Context): List<HdmiInput> =
     context.getSystemService(TvInputManager::class.java)?.tvInputList.orEmpty()
-        .filter { it.type == TvInputInfo.TYPE_HDMI && it.parentId == null }
+        .filter { it.type == TvInputInfo.TYPE_HDMI && it.parentId == null && !it.isHidden(context) }
         .sortedBy { it.id }
-        .map { HdmiInput(it.loadLabel(context), it.id) }
+        .map { HdmiInput(it.loadCustomLabel(context) ?: it.loadLabel(context), it.id) }

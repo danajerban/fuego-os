@@ -2,6 +2,7 @@ package io.github.danajerban.fuegoos
 
 import android.media.tv.TvInputInfo
 import android.media.tv.TvInputManager
+import android.net.Uri
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.rules.ExternalResource
@@ -39,6 +40,14 @@ class FakeTvInputs : ExternalResource() {
             inputTypes().let { it[HDMI_1] == TvInputInfo.TYPE_HDMI && it[HDMI_2] == TvInputInfo.TYPE_HDMI }
         }
     }
+
+    /** Names the input [inputId] [name], as the owner does in TV Settings > Inputs. */
+    fun name(inputId: String, name: String) =
+        Shell.run("settings put secure tv_input_custom_labels ${Uri.encode(inputId)},${Uri.encode(name)}")
+
+    /** Hides the input [inputId], as the owner does in TV Settings > Inputs. */
+    fun hide(inputId: String) =
+        Shell.run("settings put secure tv_input_hidden_inputs ${Uri.encode(inputId)}")
 
     private fun inputTypes(): Map<String, Int> =
         tvInputManager.tvInputList.associate { it.id to it.type }
