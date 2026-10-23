@@ -617,8 +617,8 @@ snapshot_fields() {
 }
 
 # Beside the Snapshot, a full copy of each settings namespace as `settings list` prints it
-# (KEY=VALUE lines), so restore can read the original value of any setting, named in the
-# Snapshot's fields or not. Written with the Snapshot, under the same rules.
+# (KEY=VALUE lines): a record of every original setting for the owner to consult. restore reads
+# only the Snapshot's own fields, not these copies. Written with the Snapshot, under the same rules.
 SETTINGS_NAMESPACES="global secure system"
 
 # snapshot_settings_file NAMESPACE: where that namespace's copy is kept.
