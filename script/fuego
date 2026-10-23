@@ -14,8 +14,11 @@ FUEGO_FETCH=${FUEGO_FETCH:-curl}
 
 SETUP_DOC="https://github.com/danajerban/fuego-os/blob/main/docs/tv-setup.md"
 
-# The Launcher's app ID.
+# The Launcher's app ID, its Home activity, and its Inputs screen, exported so probe can leave
+# Home for it (launcher/app/src/main/AndroidManifest.xml).
 LAUNCHER_PACKAGE=io.github.danajerban.fuegoos
+LAUNCHER_HOME="$LAUNCHER_PACKAGE/.HomeActivity"
+LAUNCHER_INPUTS="$LAUNCHER_PACKAGE/.InputsActivity"
 
 # The Android platform the Launcher builds against, and the build tools its Android Gradle Plugin
 # needs. Keep in step with the Launcher's compileSdk and with CI.
@@ -35,8 +38,8 @@ Commands:
                            Wireless debugging screen
   probe                    report the TV's chip, RAM, storage, Android build, every package
                            with the lists it is on, and its available memory, Launcher memory
-                           and Home Draw Time (Settings is opened, then Home reopened and timed).
-                           Changes nothing
+                           and Home Draw Time (once the Launcher is Home: its Inputs screen is
+                           opened, then Home reopened and timed). Changes nothing
   apply [--dry-run] [--skip-checks] [--launcher APK] [--pictures FOLDER]
                            save the Snapshot (first run only), disable the Known-Bloat List,
                            set animation scales to 0.5, install the Launcher, make it what Home
@@ -422,56 +425,53 @@ launcher_memory() {
 # print_measurements: the baseline numbers, one indented line each. probe prints them; apply
 # prints them before and after its changes.
 # Available memory is the kernel's MemAvailable. Launcher memory is the Launcher's PSS. Home Draw
-# Time is the activity manager's TotalTime for Home reopened after Settings was opened over it,
-# as when the owner presses Home: no app is stopped, and nothing is written.
+# Time is the activity manager's TotalTime for the Launcher's Home reopened after its full-screen
+# Inputs screen was opened over it, as when the owner presses Home: no app is stopped, and
+# nothing is written. It is measured once the Launcher is Home.
 print_measurements() {
   local home
   say "  Available memory:  $(($(meminfo_kb MemAvailable) / 1024)) MB"
   say "  Launcher memory:   $(launcher_memory)"
-  if ! home=$(home_activity); then
-    say "  Home Draw Time:    not measured (no app answers the Home button)"
+  home=$(home_activity) || home=none
+  if [ "$home" != "$LAUNCHER_HOME" ]; then
+    say "  Home Draw Time:    not measured (until the Launcher is Home)"
     return 0
   fi
-  # The chooser belongs to the system ("android"), and is not a Home to time.
-  if [ "${home%%/*}" = android ]; then
-    say "  Home Draw Time:    not measured (the TV asks which app to use as Home)"
-    return 0
-  fi
-  say "  Home Draw Time:    $(home_draw_time "$home")"
+  say "  Home Draw Time:    $(home_draw_time)"
 }
 
-# home_draw_time HOME: opens Settings, then reopens HOME and prints how long it took to draw, with
-# its launch state and budget (200 ms warm, 800 ms cold), or why it was not measured.
+# home_draw_time: opens the Launcher's Inputs screen, then reopens its Home and prints how long
+# Home took to draw, with its launch state and budget (200 ms warm, 800 ms cold), or why it was
+# not measured.
 home_draw_time() {
-  local home=$1 timing error state total budget=200
-  timing=$(adb_call shell am start -W -a android.settings.SETTINGS | tr -d '\r')
-  error=$(printf '%s\n' "$timing" | grep -m 1 '^Error')
-  if [ -n "$error" ]; then
-    echo "not measured (couldn't open Settings to leave Home: $error)"
+  local timing error state total budget=200
+  # Android prints a refused start (an activity that isn't exported) as a Java exception.
+  timing=$(adb_call shell am start -W -n "$LAUNCHER_INPUTS" 2>&1 | tr -d '\r')
+  if ! printf '%s\n' "$timing" | grep -q '^Status: ok$'; then
+    error=$(printf '%s\n' "$timing" | grep -m 1 -e '^Error:' -e 'Exception:')
+    echo "not measured (couldn't open the Inputs screen to leave Home: ${error:-no answer})"
     return 0
   fi
-  timing=$(adb_call shell am start -W -n "$home" | tr -d '\r')
-  state=$(printf '%s\n' "$timing" | sed -n 's/^LaunchState: \([A-Z]*\)$/\1/p')
+  # Home stops a moment after the Inputs screen has drawn over it. Reopened before that, Home was
+  # never hidden, and the TV reports no launch time (LaunchState UNKNOWN).
+  sleep 2
+  timing=$(adb_call shell am start -W -n "$LAUNCHER_HOME" | tr -d '\r')
+  state=$(printf '%s\n' "$timing" | sed -n 's/^LaunchState: \([A-Z]*\).*$/\1/p')
   total=$(printf '%s\n' "$timing" | sed -n 's/^TotalTime: \([0-9]*\)$/\1/p')
   case "$state" in
     COLD) budget=800 ;;
     HOT | WARM) ;;
     *)
-      # Android TV's Settings is a panel over Home: Home was never hidden, so nothing was redrawn.
-      if [ -n "$(printf '%s\n' "$timing" | sed -n '/^LaunchState: UNKNOWN/p')" ]; then
-        echo "not measured (Home stayed drawn behind Settings, so there was no redraw to time)"
-      else
-        echo "not measured ($(printf '%s\n' "$timing" | tail -n 1))"
-      fi
+      echo "not measured (the TV gave no launch time for Home: LaunchState ${state:-missing})"
       return 0
       ;;
   esac
   if [ -z "$total" ]; then
-    echo "not measured (no TotalTime for $home)"
+    echo "not measured (no TotalTime for $LAUNCHER_HOME)"
     return 0
   fi
   state=$(printf '%s' "$state" | tr '[:upper:]' '[:lower:]')
-  echo "$total ms ($home reopened from Settings, a $state start; budget $budget ms)"
+  echo "$total ms ($LAUNCHER_HOME reopened from the Inputs screen, a $state start; budget $budget ms)"
 }
 
 cmd_probe() {
@@ -748,9 +748,6 @@ apply_speed_settings() {
 }
 
 # --- Launcher and Home Takeover ----------------------------------------------------------------
-
-# The Launcher's Home activity (launcher/app/src/main/AndroidManifest.xml).
-LAUNCHER_HOME="$LAUNCHER_PACKAGE/.HomeActivity"
 
 # Where apply gets the Launcher when no APK is given: the latest release on GitHub, made by
 # .github/workflows/release.yml.

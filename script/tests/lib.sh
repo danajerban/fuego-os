@@ -102,11 +102,11 @@ repo_copy() {
 }
 
 # launcher_apk [VERSION_NAME VERSION_CODE [KEY]]: writes a fake Launcher APK and prints its path.
-# The fake TV reads its "package=", "home=", "folder=" (the Launcher makes its Artwork Folder when
-# it starts), "version=" and "key=" lines. The version defaults to 0.0.0 (versionCode 1) and the
-# signing key to "release".
+# The fake TV reads its "package=", "home=", "activity=" (an exported activity besides Home: the
+# Inputs screen), "folder=" (the Launcher makes its Artwork Folder when it starts), "version=" and
+# "key=" lines. The version defaults to 0.0.0 (versionCode 1) and the signing key to "release".
 launcher_apk() {
-  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\nfolder=files/artwork\nversion=%s %s\nkey=%s\n' \
+  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\nactivity=io.github.danajerban.fuegoos/.InputsActivity\nfolder=files/artwork\nversion=%s %s\nkey=%s\n' \
     "${1:-0.0.0}" "${2:-1}" "${3:-release}" > "$TEST_DIR/launcher.apk"
   echo "$TEST_DIR/launcher.apk"
 }
@@ -285,10 +285,13 @@ fake_tv_home_draw_ms() {
   printf '%s\n' "$1" > "$FAKE_TV/home-draw-ms"
 }
 
-# fake_tv_settings_full_screen: Settings opens full screen, covering Home, rather than as the
-# panel over Home that Android TV's Settings is.
-fake_tv_settings_full_screen() {
-  : > "$FAKE_TV/settings-full-screen"
+# fake_tv_launcher_is_home [APK]: as after the Home Takeover: the Launcher (the fake Launcher APK
+# by default) installed, both Takeover Packages off, and the Launcher's Home on screen.
+fake_tv_launcher_is_home() {
+  FAKE_TV_INSPECT=1 "$TESTS/fake-adb" install -r "${1:-$(launcher_apk)}" > /dev/null
+  fake_tv_set_package_state com.google.android.apps.tv.launcherx disabled-user
+  fake_tv_set_package_state com.google.android.tungsten.setupwraith disabled-user
+  FAKE_TV_INSPECT=1 "$TESTS/fake-adb" shell input keyevent KEYCODE_HOME
 }
 
 # fake_tv_process PACKAGE PSS_KB: the package is running and uses PSS_KB of memory.

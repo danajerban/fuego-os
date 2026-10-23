@@ -14,9 +14,10 @@
 #   props/<name>           getprop values
 #   meminfo                "<MemTotal kB> <MemAvailable kB>"
 #   storage                /data as "<1K-blocks> <used> <available>"
-#   home-draw-ms           how long Home takes to draw when started or reopened from full-screen
-#                          Settings
-#   settings-full-screen   present: Settings opens full screen, not as Android TV's panel over Home
+#   activities             the exported activities besides Home that installed apps bring (the
+#                          Launcher's Inputs screen), one component per line (absent: none)
+#   home-draw-ms           how long Home takes to draw when started, or brought back from one of
+#                          those activities
 #   processes/<package>    a running package's TOTAL PSS in kB (dumpsys meminfo)
 #   sdcard/                files under /sdcard (also reachable as /storage/emulated/0)
 #   versions/<package>     "<versionName> <versionCode> <key>" of an app installed with adb install
@@ -220,6 +221,9 @@ install() {
     sed -n 's/^home=//p' "$apk" | while read -r home; do
       home_candidate "$home" > /dev/null || echo "$home 0" >> "$tv/home-activities"
     done
+    sed -n 's/^activity=//p' "$apk" | while read -r activity; do
+      other_activity "$activity" || echo "$activity" >> "$tv/activities"
+    done
     mkdir -p "$tv/app-folders"
     sed -n 's/^folder=//p' "$apk" > "$tv/app-folders/$pkg"
   fi
@@ -265,6 +269,10 @@ uninstall() {
     rm -rf "$tv/sdcard/Android/data/$pkg"
     grep -v "^$pkg/" "$tv/home-activities" > "$tv/home-activities.new"
     mv "$tv/home-activities.new" "$tv/home-activities"
+    if [ -f "$tv/activities" ]; then
+      grep -v "^$pkg/" "$tv/activities" > "$tv/activities.new"
+      mv "$tv/activities.new" "$tv/activities"
+    fi
   fi
   echo "Success"
 }
@@ -294,6 +302,17 @@ home_candidate() {
       return 0
     fi
   done < "$tv/home-activities"
+  return 1
+}
+
+# other_activity COMPONENT: succeeds when COMPONENT is an exported activity besides Home.
+other_activity() {
+  local want component
+  [ -f "$tv/activities" ] || return 1
+  want=$(long_form "$1")
+  while read -r component; do
+    [ "$(long_form "$component")" = "$want" ] && return 0
+  done < "$tv/activities"
   return 1
 }
 
@@ -405,17 +424,14 @@ dumpsys_window() {
   dumpsys_window_windows
 }
 
-# Settings, as Android TV has it: a panel over Home, so Home stays drawn behind it.
-SETTINGS_ACTIVITY=com.android.tv.settings/.MainSettings
-
-# am start -W -n COMPONENT | -a android.settings.SETTINGS: starts the activity and reports its
-# timing, as an API 34 emulator prints it. Only the activities that answer the Home intent and
-# Settings exist on the fake TV. Started again while it has focus, it gets the intent and no timing;
-# brought back from behind the Settings panel, it was never hidden, so there is no timing either.
+# am start -W -n COMPONENT: starts the activity and reports its timing, as an API 34 emulator
+# prints it. Only the activities that answer the Home intent and the exported activities besides
+# Home (activities) exist on the fake TV. Started again while it has focus, an activity gets the
+# intent and no timing. One of the other activities opens in a task of its own, so Home's task
+# goes behind it and Home stops drawing; Home brought back from it is a hot start.
 am_start() {
-  local component pkg class total
+  local component pkg class total focus
   case "$*" in
-    "-W -a android.settings.SETTINGS") open_settings; return 0 ;;
     "-W -n "*/*) component=$3 ;;
     *) unsupported ;;
   esac
@@ -423,65 +439,54 @@ am_start() {
   pkg=${component%%/*}
   class=${component#*/}
   echo "Starting: Intent { cmp=$component }"
-  if ! home_candidate "$component" > /dev/null || ! package_enabled "$pkg"; then
+  if { ! home_candidate "$component" > /dev/null && ! other_activity "$component"; } ||
+    ! package_enabled "$pkg"; then
     case "$class" in .*) class=$pkg$class ;; esac
     echo "Error type 3"
     echo "Error: Activity class {$pkg/$class} does not exist."
     return 0
   fi
   total=$(cat "$tv/home-draw-ms")
-  case "$(cat "$tv/focus")" in
-    "$component")
-      echo "Warning: Activity not started, intent has been delivered to currently running top-most instance."
-      echo "Status: ok"
-      echo "LaunchState: UNKNOWN (0)"
-      echo "Activity: $component"
-      echo "TotalTime: 0"
-      echo "WaitTime: 19"
-      echo "Complete"
-      return 0
-      ;;
-    "$SETTINGS_ACTIVITY")
-      echo "$component" > "$tv/focus"
-      echo "Warning: Activity not started, its current task has been brought to the front"
-      echo "Status: ok"
-      if [ -e "$tv/settings-full-screen" ]; then
-        echo "LaunchState: HOT"
-        echo "Activity: $component"
-        echo "TotalTime: $total"
-        echo "WaitTime: $((total + 15))"
-      else
-        echo "LaunchState: UNKNOWN (0)"
-        echo "Activity: $component"
-        echo "TotalTime: 0"
-        echo "WaitTime: 20"
-      fi
-      echo "Complete"
-      return 0
-      ;;
-  esac
-  echo "$component" > "$tv/focus"
-  start_app "$pkg"
-  echo "Status: ok"
-  echo "LaunchState: COLD"
-  echo "Activity: $component"
-  echo "TotalTime: $total"
-  echo "WaitTime: $((total + 8))"
-  echo "Complete"
-}
-
-open_settings() {
-  echo "Starting: Intent { act=android.settings.SETTINGS }"
-  if ! package_enabled "${SETTINGS_ACTIVITY%%/*}"; then
-    echo "Error: Activity not started, unable to resolve Intent { act=android.settings.SETTINGS flg=0x10000000 }"
+  focus=$(cat "$tv/focus")
+  if [ "$focus" = "$component" ]; then
+    echo "Warning: Activity not started, intent has been delivered to currently running top-most instance."
+    echo "Status: ok"
+    echo "LaunchState: UNKNOWN (0)"
+    echo "Activity: $component"
+    echo "TotalTime: 0"
+    echo "WaitTime: 19"
+    echo "Complete"
     return 0
   fi
-  echo "$SETTINGS_ACTIVITY" > "$tv/focus"
-  echo "Status: ok"
-  echo "LaunchState: COLD"
-  echo "Activity: $SETTINGS_ACTIVITY"
-  echo "TotalTime: 634"
-  echo "WaitTime: 651"
+  echo "$component" > "$tv/focus"
+  start_app "$pkg"
+  if other_activity "$component"; then
+    echo "Status: ok"
+    if [ "$focus" = null ]; then
+      echo "LaunchState: COLD"
+      echo "Activity: $component"
+      echo "TotalTime: 431"
+      echo "WaitTime: 440"
+    else
+      echo "LaunchState: WARM"
+      echo "Activity: $component"
+      echo "TotalTime: 199"
+      echo "WaitTime: 215"
+    fi
+  elif other_activity "$focus"; then
+    echo "Warning: Activity not started, its current task has been brought to the front"
+    echo "Status: ok"
+    echo "LaunchState: HOT"
+    echo "Activity: $component"
+    echo "TotalTime: $total"
+    echo "WaitTime: $((total + 29))"
+  else
+    echo "Status: ok"
+    echo "LaunchState: COLD"
+    echo "Activity: $component"
+    echo "TotalTime: $total"
+    echo "WaitTime: $((total + 8))"
+  fi
   echo "Complete"
 }
 
@@ -701,7 +706,7 @@ case "$*" in
   "shell dumpsys meminfo "*) log read; need_device; dumpsys_meminfo "$4" ;;
   "shell cat /proc/meminfo") log read; need_device; meminfo ;;
   "shell df -k /data") log read; need_device; df_data ;;
-  # Starting Home or Settings changes no stored state (packages, settings, the Home choice).
+  # Starting an activity changes no stored state (packages, settings, the Home choice).
   "shell am start"*) log read; need_device; shift 3; am_start "$@" ;;
   "shell ls"*) log read; need_device; shift 2; ls_path "$@" ;;
   "shell mkdir"*) log write; need_device; shift 2; mkdir_path "$@" ;;

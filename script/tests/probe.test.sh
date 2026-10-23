@@ -37,31 +37,39 @@ test_probe_tags_each_package_with_its_lists() {
 
 test_probe_measures_available_memory_and_home_draw_time() {
   fake_tv_memory 2025912 655360
-  fake_tv_settings_full_screen
+  fake_tv_launcher_is_home
   fake_tv_home_draw_ms 83
   run_fuego probe
   assert_status 0
   assert_output_contains "Available memory:  640 MB"
-  assert_output_contains "Home Draw Time:    83 ms (com.google.android.apps.tv.launcherx/.home.HomeActivity reopened from Settings, a hot start; budget 200 ms)"
-  assert_equals "read shell am start -W -a android.settings.SETTINGS
-read shell am start -W -n com.google.android.apps.tv.launcherx/.home.HomeActivity" \
+  assert_output_contains "Home Draw Time:    83 ms (io.github.danajerban.fuegoos/.HomeActivity reopened from the Inputs screen, a hot start; budget 200 ms)"
+  assert_equals "read shell am start -W -n io.github.danajerban.fuegoos/.InputsActivity
+read shell am start -W -n io.github.danajerban.fuegoos/.HomeActivity" \
     "$(fake_tv_calls | grep ' am ')" "how Home is timed"
-  assert_equals com.google.android.apps.tv.launcherx/.home.HomeActivity "$(fake_tv_focus)" "focus afterwards"
+  assert_equals io.github.danajerban.fuegoos/.HomeActivity "$(fake_tv_focus)" "focus afterwards"
 }
 
-test_probe_does_not_count_home_left_drawn_behind_the_settings_panel() {
+test_probe_does_not_time_home_until_the_launcher_is_home() {
   run_fuego probe
   assert_status 0
-  assert_output_contains "Home Draw Time:    not measured (Home stayed drawn behind Settings, so there was no redraw to time)"
-  assert_output_lacks "0 ms"
+  assert_output_contains "Home Draw Time:    not measured (until the Launcher is Home)"
+  fake_tv_install_package io.github.danajerban.fuegoos user
+  run_fuego probe
+  assert_status 0
+  assert_output_contains "Home Draw Time:    not measured (until the Launcher is Home)"
+  assert_equals "" "$(fake_tv_calls | grep ' am ')" "activities started"
 }
 
-test_probe_says_when_settings_does_not_open() {
-  fake_tv_set_package_state com.android.tv.settings disabled-user
+test_probe_says_when_the_inputs_screen_does_not_open() {
+  # A Launcher whose Inputs screen can't be started over adb.
+  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\n' \
+    > "$TEST_DIR/inputs-less.apk"
+  fake_tv_launcher_is_home "$TEST_DIR/inputs-less.apk"
   run_fuego probe
   assert_status 0
-  assert_output_contains "Home Draw Time:    not measured (couldn't open Settings to leave Home: Error: Activity not started, unable to resolve Intent"
-  assert_equals "" "$(fake_tv_calls | grep ' am start -W -n')" "Home timed without leaving it"
+  assert_output_contains "Home Draw Time:    not measured (couldn't open the Inputs screen to leave Home: Error: Activity class {io.github.danajerban.fuegoos/io.github.danajerban.fuegoos.InputsActivity} does not exist.)"
+  assert_equals "" "$(fake_tv_calls | grep ' am start -W -n io.github.danajerban.fuegoos/.HomeActivity')" \
+    "Home timed without leaving it"
 }
 
 test_probe_measures_the_launchers_memory() {
@@ -76,26 +84,8 @@ test_probe_measures_the_launchers_memory() {
   assert_output_contains "Launcher memory:   16.9 MB (PSS)"
 }
 
-test_probe_says_when_there_is_no_home_to_time() {
-  fake_tv_set_package_state com.google.android.apps.tv.launcherx disabled-user
-  fake_tv_set_package_state com.google.android.tungsten.setupwraith disabled-user
-  run_fuego probe
-  assert_status 0
-  assert_output_contains "Home Draw Time:    not measured (no app answers the Home button)"
-}
-
-test_probe_does_not_time_the_home_chooser() {
-  # A second Home as high as the Stock Launcher, and none chosen: the TV asks.
-  fake_tv_home_activity com.other.launcher/.Home 2
-  run_fuego probe
-  assert_status 0
-  assert_output_contains "Home Draw Time:    not measured (the TV asks which app to use as Home)"
-  if fake_tv_calls | grep -q "am start"; then
-    fail "probe started the Home chooser: $(fake_tv_calls | grep "am start")"
-  fi
-}
-
 test_probe_changes_nothing_on_the_tv_or_the_mac() {
+  fake_tv_launcher_is_home # so that Home is timed
   mkdir -p "$TEST_DIR/cwd" "$TEST_DIR/tmp"
   cd "$TEST_DIR/cwd" || fail "can't enter $TEST_DIR/cwd"
   export TMPDIR="$TEST_DIR/tmp"

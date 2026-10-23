@@ -188,15 +188,21 @@ test_apply_dry_run_after_a_real_run_keeps_the_snapshot() {
 }
 
 test_apply_prints_measurements_before_and_after() {
-  fake_tv_settings_full_screen
-  run_fuego apply
+  fake_tv_home_draw_ms 61
+  run_fuego_answering "yes
+yes
+yes
+yes
+yes" apply --launcher "$(launcher_apk)"
   assert_status 0
   assert_equals 2 "$(printf '%s\n' "$OUTPUT" | grep -c '^  Available memory:  859 MB$')" \
     "available memory lines"
   assert_equals "Before
 After" "$(printf '%s\n' "$OUTPUT" | grep -e '^Before$' -e '^After$')" "measurement headings"
-  assert_equals 2 "$(printf '%s\n' "$OUTPUT" | grep -c '^  Home Draw Time:    1432 ms (')" \
-    "Home Draw Time lines"
+  # Before the Home Takeover the Stock Launcher is Home; after it, the Launcher is, and is timed.
+  assert_equals "  Home Draw Time:    not measured (until the Launcher is Home)
+  Home Draw Time:    61 ms (io.github.danajerban.fuegoos/.HomeActivity reopened from the Inputs screen, a hot start; budget 200 ms)" \
+    "$(printf '%s\n' "$OUTPUT" | grep '^  Home Draw Time:')" "Home Draw Time lines"
 }
 
 test_apply_sets_animation_scales_to_half_and_no_other_setting() {

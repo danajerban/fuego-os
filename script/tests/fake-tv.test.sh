@@ -355,58 +355,43 @@ test_fake_tv_reports_storage_in_kilobyte_blocks() {
 /dev/block/dm-37  10167132 565024   9454652   6% /data/user/0" "$OUTPUT"
 }
 
-test_fake_tv_opens_settings_as_a_panel_over_home() {
-  local home
-  home=$(fake_tv_home)
-  adb_fake shell am start -W -a android.settings.SETTINGS
+test_fake_tv_opens_the_launchers_inputs_screen_over_home() {
+  fake_tv_launcher_is_home
+  adb_fake shell am start -W -n io.github.danajerban.fuegoos/.InputsActivity
   assert_status 0
-  assert_equals "Starting: Intent { act=android.settings.SETTINGS }
+  assert_equals "Starting: Intent { cmp=io.github.danajerban.fuegoos/.InputsActivity }
 Status: ok
-LaunchState: COLD
-Activity: com.android.tv.settings/.MainSettings
-TotalTime: 634
-WaitTime: 651
+LaunchState: WARM
+Activity: io.github.danajerban.fuegoos/.InputsActivity
+TotalTime: 199
+WaitTime: 215
 Complete" "$OUTPUT"
-  assert_equals com.android.tv.settings/.MainSettings "$(fake_tv_focus)"
-  # Home stays drawn behind the panel, so bringing it back draws nothing new and has no time.
-  adb_fake shell am start -W -n "$home"
-  assert_status 0
-  assert_equals "Starting: Intent { cmp=$home }
-Warning: Activity not started, its current task has been brought to the front
-Status: ok
-LaunchState: UNKNOWN (0)
-Activity: $home
-TotalTime: 0
-WaitTime: 20
-Complete" "$OUTPUT"
-  assert_equals "$home" "$(fake_tv_focus)"
+  assert_equals io.github.danajerban.fuegoos/.InputsActivity "$(fake_tv_focus)"
 }
 
-test_fake_tv_times_home_reopened_from_full_screen_settings() {
-  local home
-  home=$(fake_tv_home)
-  fake_tv_settings_full_screen
-  fake_tv_home_draw_ms 83
-  adb_fake shell am start -W -a android.settings.SETTINGS
-  adb_fake shell am start -W -n "$home"
+test_fake_tv_times_home_brought_back_from_another_screen() {
+  fake_tv_launcher_is_home
+  fake_tv_home_draw_ms 54
+  adb_fake shell am start -W -n io.github.danajerban.fuegoos/.InputsActivity
+  adb_fake shell am start -W -n io.github.danajerban.fuegoos/.HomeActivity
   assert_status 0
-  assert_equals "Starting: Intent { cmp=$home }
+  assert_equals "Starting: Intent { cmp=io.github.danajerban.fuegoos/.HomeActivity }
 Warning: Activity not started, its current task has been brought to the front
 Status: ok
 LaunchState: HOT
-Activity: $home
-TotalTime: 83
-WaitTime: 98
+Activity: io.github.danajerban.fuegoos/.HomeActivity
+TotalTime: 54
+WaitTime: 83
 Complete" "$OUTPUT"
-  assert_equals "$home" "$(fake_tv_focus)"
+  assert_equals io.github.danajerban.fuegoos/.HomeActivity "$(fake_tv_focus)"
 }
 
-test_fake_tv_cannot_open_settings_without_its_app() {
-  fake_tv_set_package_state com.android.tv.settings disabled-user
-  adb_fake shell am start -W -a android.settings.SETTINGS
+test_fake_tv_has_no_inputs_screen_without_the_launcher() {
+  adb_fake shell am start -W -n io.github.danajerban.fuegoos/.InputsActivity
   assert_status 0
-  assert_equals "Starting: Intent { act=android.settings.SETTINGS }
-Error: Activity not started, unable to resolve Intent { act=android.settings.SETTINGS flg=0x10000000 }" "$OUTPUT"
+  assert_equals "Starting: Intent { cmp=io.github.danajerban.fuegoos/.InputsActivity }
+Error type 3
+Error: Activity class {io.github.danajerban.fuegoos/io.github.danajerban.fuegoos.InputsActivity} does not exist." "$OUTPUT"
 }
 
 test_fake_tv_starts_an_activity_cold() {
