@@ -1006,6 +1006,8 @@ apply_home_takeover() {
       outcome "would ask" "the owner's yes to the Wi-Fi warning"
     elif ! owner_accepts_wifi_warning; then
       outcome "not done" "Home Takeover: no yes from the owner, so the Takeover Packages stay on"
+      # Home goes back to the app it was chosen from, so the TV isn't left half taken over.
+      [ -z "$home_before" ] || set_home "$home_before"
       return 0
     fi
     for pkg in $on; do
