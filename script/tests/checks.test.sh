@@ -97,6 +97,24 @@ write shell input keyevent KEYCODE_HOME" "$(fake_tv_writes)" "writes"
   assert_output_contains "not done     Check Step: no answers"
 }
 
+test_apply_after_the_casting_fallback_and_a_tv_update_disables_only_the_stock_launcher() {
+  run_fuego_answering "$(takeover_and_checks no yes yes yes)" apply --launcher "$(launcher_apk)"
+  assert_status 0
+  fake_tv_set_package_state "$STOCK_LAUNCHER" enabled # as a TV update might do
+  : > "$FAKE_TV/calls"
+  # Return to keep the setup wizard on, then yes to the Wi-Fi warning.
+  run_fuego_answering "$(printf '\nyes')" apply
+  assert_status 0
+  assert_output_contains "unchanged    $SETUP_WIZARD left on for casting (the Casting Fallback)"
+  assert_equals "write shell pm disable-user --user 0 $STOCK_LAUNCHER
+write shell input keyevent KEYCODE_HOME" "$(fake_tv_writes)" "writes"
+  assert_equals disabled-user "$(fake_tv_package_state "$STOCK_LAUNCHER")"
+  assert_equals enabled "$(fake_tv_package_state "$SETUP_WIZARD")"
+  assert_output_contains "checked      Home focus after a Home press: $SETUP_WIZARD/.RecoveryActivity"
+  assert_output_lacks "Rolling back"
+  assert_output_lacks "Check Step"
+}
+
 test_check_step_is_skipped_with_skip_checks() {
   run_fuego_answering "$(takeover_and_checks no no no no)" apply --skip-checks --launcher "$(launcher_apk)"
   assert_status 0
