@@ -123,7 +123,8 @@ test_takeover_rolls_back_when_a_takeover_package_stays_on() {
 }
 
 test_apply_again_finds_the_takeover_in_place_and_asks_nothing() {
-  run_fuego_answering yes apply --launcher "$(launcher_apk)"
+  # yes to the Wi-Fi warning, then the four checks answered.
+  run_fuego_answering "$(printf 'yes\nyes\nyes\nyes\nyes')" apply --launcher "$(launcher_apk)"
   assert_status 0
   : > "$FAKE_TV/calls"
   run_fuego apply
@@ -131,6 +132,7 @@ test_apply_again_finds_the_takeover_in_place_and_asks_nothing() {
   assert_no_writes
   assert_output_contains "unchanged    Home opens the Launcher ($LAUNCHER_HOME)"
   assert_output_lacks "Disabling the setup wizard"
+  assert_output_lacks "Check Step"
 }
 
 test_apply_redoes_the_takeover_after_a_tv_update_re_enables_the_stock_launcher() {

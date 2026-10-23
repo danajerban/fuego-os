@@ -104,6 +104,11 @@ snapshot_file() {
   echo "$HOME/Library/Application Support/fuego-os/snapshot"
 }
 
+# The Check Step's answers, kept beside the Snapshot.
+checks_file() {
+  echo "$HOME/Library/Application Support/fuego-os/checks"
+}
+
 # --- Assertions ----------------------------------------------------------------------------
 
 assert_status() {
