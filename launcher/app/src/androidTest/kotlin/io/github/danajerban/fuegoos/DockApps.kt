@@ -41,19 +41,28 @@ class DockApps : ExternalResource() {
         if (isInstalled(app)) return
         Shell.run("cmd package install-existing --user 0 ${app.packageName}")
         if (isInstalled(app)) return
-        val apk = InstrumentationRegistry.getInstrumentation().context.assets
-            .open(app.fakeApk).use { it.readBytes() }
-        val output = Shell.run("pm install --user 0 -S ${apk.size}", apk.inputStream())
-        check(isInstalled(app)) { "Could not install the fake ${app.name}: $output" }
+        installFakeApk(app.fakeApk, app.packageName)
     }
 
-    fun uninstall(app: DockApp) {
-        if (!isInstalled(app)) return
-        val output = Shell.run("pm uninstall --user 0 ${app.packageName}")
-        check(!isInstalled(app)) { "Could not uninstall ${app.name}: $output" }
-    }
+    fun uninstall(app: DockApp) = uninstallPackage(app.packageName)
 
-    private fun isInstalled(app: DockApp): Boolean =
-        Shell.run("pm list packages --user 0 ${app.packageName}").lines()
-            .any { it.trim() == "package:${app.packageName}" }
+    private fun isInstalled(app: DockApp): Boolean = isPackageInstalled(app.packageName)
 }
+
+/** Installs [packageName] from [fakeApk], one of the fake APKs the UI tests carry as assets. */
+fun installFakeApk(fakeApk: String, packageName: String) {
+    val apk = InstrumentationRegistry.getInstrumentation().context.assets
+        .open(fakeApk).use { it.readBytes() }
+    val output = Shell.run("pm install --user 0 -S ${apk.size}", apk.inputStream())
+    check(isPackageInstalled(packageName)) { "Could not install $fakeApk: $output" }
+}
+
+fun uninstallPackage(packageName: String) {
+    if (!isPackageInstalled(packageName)) return
+    val output = Shell.run("pm uninstall --user 0 $packageName")
+    check(!isPackageInstalled(packageName)) { "Could not uninstall $packageName: $output" }
+}
+
+fun isPackageInstalled(packageName: String): Boolean =
+    Shell.run("pm list packages --user 0 $packageName").lines()
+        .any { it.trim() == "package:$packageName" }

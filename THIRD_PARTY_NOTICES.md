@@ -6,7 +6,7 @@
 |---|---|---|---|
 | CleanYourTV | [github.com/Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv), commit `30626a8` | MIT, Copyright (c) 2026 Gathin | The blur trick (artwork shrunk to a 48x27 bitmap and stretched, from `HeroArt.java`) in `launcher/app/src/main/kotlin/io/github/danajerban/fuegoos/GlassBand.kt`; the cached glass highlight (from `GlassView.java`) in `launcher/app/src/main/kotlin/io/github/danajerban/fuegoos/GlassHighlight.kt`. Both ported to Kotlin and changed. |
 
-The Launcher's bundled artwork (`launcher/app/src/main/res/drawable-nodpi/artwork_*.webp`) is ours: `launcher/tools/make-bundled-artwork.py` draws it, under fuego-os's own licence.
+The Launcher's bundled artwork (`launcher/app/src/main/res/drawable-nodpi/artwork_*.webp`) is ours: `launcher/make_bundled_artwork.py` draws it, under fuego-os's own licence.
 
 ### CleanYourTV licence
 

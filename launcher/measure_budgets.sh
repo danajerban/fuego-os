@@ -8,7 +8,7 @@
 # which has the Dock in it (the artwork is decoded after and fades in). Memory is TOTAL PSS from
 # `dumpsys meminfo`, read a few seconds after each warm visit so the artwork is in.
 #
-# Usage: launcher/tools/measure-budgets [runs]   (default 5 runs; the verdict uses the median)
+# Usage: launcher/measure_budgets.sh [runs]   (default 5 runs; the verdict uses the median)
 # Needs the Launcher installed and one Keep List app to leave Home for. Pick the device with
 # ANDROID_SERIAL (or point FUEGO_ADB at another adb). Runs on macOS's bash 3.2.
 set -u
@@ -23,7 +23,7 @@ adb_shell() {
 }
 
 fail() {
-  echo "measure-budgets: $*" >&2
+  echo "measure_budgets.sh: $*" >&2
   exit 2
 }
 
@@ -101,7 +101,7 @@ done
 
 echo "Launcher budgets on $(adb_shell getprop ro.product.model) (Android $(adb_shell getprop ro.build.version.release)):"
 ok=0
-verdict "Cold Home draw" ms 800 "${cold[@]}" || ok=1
-verdict "Warm Home draw" ms 200 "${warm[@]}" || ok=1
+verdict "Cold Home Draw Time" ms 800 "${cold[@]}" || ok=1
+verdict "Warm Home Draw Time" ms 200 "${warm[@]}" || ok=1
 verdict "Memory (total PSS) on Home" MB 40 "${memory[@]}" || ok=1
 exit "$ok"

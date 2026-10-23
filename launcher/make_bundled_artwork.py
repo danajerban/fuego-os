@@ -2,7 +2,7 @@
 """Draws the Launcher's bundled artwork: soft abstract colour fields at TV resolution, saved as WebP.
 
 The pictures are ours (made by this script, MIT like the rest of fuego-os), so they need no notice.
-Rerun it to remake them: python3 launcher/tools/make-bundled-artwork.py (needs Pillow).
+Rerun it to remake them: python3 launcher/make_bundled_artwork.py (needs Pillow).
 """
 import pathlib
 

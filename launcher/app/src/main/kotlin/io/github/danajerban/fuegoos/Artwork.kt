@@ -46,7 +46,7 @@ class Artwork(context: Context) {
         const val BUNDLED = "bundled"
         val OWNER_EXTENSIONS = setOf("jpg", "jpeg", "png")
 
-        /** The bundled artwork, in name order. Made by launcher/tools/make-bundled-artwork.py. */
+        /** The bundled artwork, in name order. Made by launcher/make_bundled_artwork.py. */
         val BUNDLED_PICTURES = listOf(
             "dusk" to R.drawable.artwork_dusk,
             "ember" to R.drawable.artwork_ember,

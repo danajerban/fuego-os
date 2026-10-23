@@ -2,7 +2,7 @@
 
 Makes one Fuego 2K Google TV (Android TV OS 14) fast and free of Bloat, over ADB, without root.
 
-> **Status: pre-release, design stage.** There is no code yet and nothing here has been tried on the TV. The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1); the words it uses are in [GLOSSARY.md](GLOSSARY.md).
+> **Status: pre-release, being built.** The script's `check`, `pair`, `connect` and `probe`, the package lists and the Launcher's base are in place; `apply`, `restore` and the rest of the Launcher are not yet. Nothing here has been tried on the TV. The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1); the words it uses are in [GLOSSARY.md](GLOSSARY.md), and the decisions behind it in [docs/adr/](docs/adr/).
 
 > **Not affiliated with Fuego, Google, Netflix, YouTube, Stremio or Spotify.** Use it at your own risk.
 
@@ -41,6 +41,7 @@ Releases will carry the Launcher APK and the script bundle.
 ## How to undo
 
 - `restore` puts back everything the Snapshot recorded, hands Home back to the Stock Launcher and uninstalls the Launcher. It works even if the Launcher was already uninstalled.
+- The Snapshot is a text file on the Mac, at `~/Library/Application Support/fuego-os/snapshot` (set `FUEGO_STATE_DIR` to keep it elsewhere). Keep it: it is the way back.
 - A factory reset also undoes everything: Debloat applies to the TV's user only, and the Launcher is an ordinary app.
 
 ## Contributing and security
