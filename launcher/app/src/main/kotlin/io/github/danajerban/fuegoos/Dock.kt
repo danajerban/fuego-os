@@ -13,7 +13,7 @@ val dockTiles = listOf(
     appTile(R.string.tile_youtube, "com.google.android.youtube.tv"),
     appTile(R.string.tile_stremio, "com.stremio.one"),
     appTile(R.string.tile_spotify, "com.spotify.tv.android"),
-    // The Inputs tile goes here, between Spotify and Settings.
+    DockTile(R.string.tile_inputs) { context -> Intent(context, InputsActivity::class.java) },
     DockTile(R.string.tile_settings) { context ->
         Intent(Settings.ACTION_SETTINGS).takeIf { it.resolveActivity(context.packageManager) != null }
     },
