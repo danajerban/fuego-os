@@ -41,7 +41,7 @@ test_probe_measures_available_memory_and_home_draw_time() {
   run_fuego probe
   assert_status 0
   assert_output_contains "Available memory:  640 MB"
-  assert_output_contains "Home draw time:    1432 ms (cold start of com.google.android.apps.tv.launcherx/com.google.android.apps.tv.launcherx.home.HomeActivity)"
+  assert_output_contains "Home draw time:    1432 ms (cold start of com.google.android.apps.tv.launcherx/.home.HomeActivity)"
 }
 
 test_probe_measures_the_launchers_memory() {
@@ -65,9 +65,8 @@ test_probe_says_when_there_is_no_home_to_time() {
 }
 
 test_probe_does_not_time_the_home_chooser() {
-  fake_tv_install_package android system
-  printf '%s\n' android/com.android.internal.app.ResolverActivity "$(cat "$FAKE_TV/home-activities")" \
-    > "$FAKE_TV/home-activities"
+  # A second Home as high as the Stock Launcher, and none chosen: the TV asks.
+  fake_tv_home_activity com.other.launcher/.Home 2
   run_fuego probe
   assert_status 0
   assert_output_contains "Home draw time:    not measured (the TV asks which app to use as Home)"

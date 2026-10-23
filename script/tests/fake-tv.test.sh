@@ -40,24 +40,107 @@ test_fake_tv_reads_build_facts() {
   assert_equals UKNV.260529.001 "$OUTPUT"
 }
 
-test_fake_tv_home_press_opens_the_home_activity() {
-  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\n' \
-    > "$TEST_DIR/launcher.apk"
+# The expected outputs in the Home tests below are copied from an Android TV API 34 emulator,
+# whose Stock Launcher is com.google.android.tvlauncher (priority 2, like launcherx here).
+
+test_fake_tv_installs_an_apk_like_adb() {
+  launcher_apk > /dev/null
   adb_fake install -r "$TEST_DIR/launcher.apk"
-  assert_output_contains "Success"
-  adb_fake shell cmd package set-home-activity io.github.danajerban.fuegoos/.HomeActivity
-  assert_equals Success "$OUTPUT"
-  adb_fake shell input keyevent KEYCODE_HOME
-  adb_fake shell dumpsys window
-  assert_output_contains "mCurrentFocus=Window{"
-  assert_output_contains "io.github.danajerban.fuegoos/.HomeActivity}"
+  assert_status 0
+  assert_equals "Performing Streamed Install
+Success" "$OUTPUT"
+  assert_equals enabled "$(fake_tv_package_state io.github.danajerban.fuegoos)"
+  adb_fake install -r "$TEST_DIR/no-such.apk"
+  assert_status 1
+  assert_equals "Performing Streamed Install
+adb: failed to stat $TEST_DIR/no-such.apk: No such file or directory" "$OUTPUT"
+  echo junk > "$TEST_DIR/junk.apk"
+  adb_fake install -r "$TEST_DIR/junk.apk"
+  assert_status 1
+  assert_output_contains "adb: failed to install $TEST_DIR/junk.apk: Failure [INSTALL_PARSE_FAILED_NOT_APK: Failed to parse"
 }
 
-test_fake_tv_home_falls_back_when_the_home_package_is_disabled() {
+test_fake_tv_resolves_home_in_short_form_with_its_priority() {
+  adb_fake shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME
+  assert_equals "priority=2 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true
+com.google.android.apps.tv.launcherx/.home.HomeActivity" "$OUTPUT"
+}
+
+test_fake_tv_set_home_activity_changes_nothing_while_the_stock_launcher_is_enabled() {
+  launcher_apk > /dev/null
+  adb_fake install -r "$TEST_DIR/launcher.apk"
+  adb_fake shell cmd package set-home-activity io.github.danajerban.fuegoos/.HomeActivity
+  assert_status 0
+  assert_equals Success "$OUTPUT"
+  adb_fake shell cmd role get-role-holders --user 0 android.app.role.HOME
+  assert_equals io.github.danajerban.fuegoos "$OUTPUT"
+  assert_equals com.google.android.apps.tv.launcherx/.home.HomeActivity "$(fake_tv_home)"
+  adb_fake shell input keyevent KEYCODE_HOME
+  assert_status 0
+  assert_equals "" "$OUTPUT"
+  assert_equals com.google.android.apps.tv.launcherx/.home.HomeActivity "$(fake_tv_focus)"
+}
+
+test_fake_tv_home_press_opens_the_chosen_home_once_the_takeover_packages_are_off() {
+  launcher_apk > /dev/null
+  adb_fake install -r "$TEST_DIR/launcher.apk"
+  adb_fake shell cmd package set-home-activity io.github.danajerban.fuegoos/.HomeActivity
   adb_fake shell pm disable-user --user 0 com.google.android.apps.tv.launcherx
-  assert_equals \
-    com.google.android.tungsten.setupwraith/com.google.android.tungsten.setupwraith.FallbackHomeActivity \
-    "$(fake_tv_home)"
+  # With launcherx off, the setup wizard (priority 1) still outranks the chosen Launcher.
+  assert_equals com.google.android.tungsten.setupwraith/.RecoveryActivity "$(fake_tv_home)"
+  adb_fake shell pm disable-user --user 0 com.google.android.tungsten.setupwraith
+  adb_fake shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME
+  assert_equals "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true
+io.github.danajerban.fuegoos/.HomeActivity" "$OUTPUT"
+  adb_fake shell input keyevent KEYCODE_HOME
+  adb_fake shell dumpsys window
+  assert_output_contains "  mCurrentFocus=Window{5e1f2a u0 io.github.danajerban.fuegoos/io.github.danajerban.fuegoos.HomeActivity}"
+  assert_output_contains "  mFocusedApp=ActivityRecord{8c3d1b u0 io.github.danajerban.fuegoos/.HomeActivity t7}"
+}
+
+test_fake_tv_disabling_the_focused_app_leaves_no_focus() {
+  adb_fake shell pm disable-user --user 0 com.google.android.apps.tv.launcherx
+  adb_fake shell dumpsys window
+  assert_output_contains "  mCurrentFocus=null"
+  assert_output_contains "  mFocusedApp=null"
+}
+
+test_fake_tv_refuses_a_home_activity_in_a_disabled_or_missing_package() {
+  adb_fake shell pm disable-user --user 0 com.google.android.apps.tv.launcherx
+  adb_fake shell cmd package set-home-activity com.google.android.apps.tv.launcherx/.home.HomeActivity
+  assert_status 1
+  assert_equals "Error: Failed to set default home." "$OUTPUT"
+  adb_fake shell cmd package set-home-activity no.such.pkg/.Main
+  assert_status 1
+  assert_equals "Error: Failed to set default home." "$OUTPUT"
+}
+
+test_fake_tv_home_role_falls_back_when_its_holder_is_uninstalled() {
+  adb_fake shell cmd role get-role-holders --user 0 android.app.role.HOME
+  assert_equals com.google.android.apps.tv.launcherx "$OUTPUT"
+  launcher_apk > /dev/null
+  adb_fake install -r "$TEST_DIR/launcher.apk"
+  adb_fake shell cmd package set-home-activity io.github.danajerban.fuegoos/.HomeActivity
+  adb_fake uninstall io.github.danajerban.fuegoos
+  adb_fake shell cmd role get-role-holders --user 0 android.app.role.HOME
+  assert_equals com.google.android.apps.tv.launcherx "$OUTPUT"
+}
+
+test_fake_tv_asks_which_home_when_two_share_the_top_priority() {
+  fake_tv_home_activity com.other.launcher/.Home 2
+  assert_equals android/com.android.internal.app.ResolverActivity "$(fake_tv_home)"
+}
+
+test_fake_tv_lists_settings_like_settings_list() {
+  adb_fake shell settings list secure
+  assert_status 0
+  assert_equals "screensaver_components=com.google.android.apps.tv.dreamx/.service.Backdrop
+screensaver_enabled=1" "$OUTPUT"
+  fake_tv_setting global Phenotype_boot_count 2
+  adb_fake shell settings list global
+  assert_equals "Phenotype_boot_count=2
+transition_animation_scale=1.0
+window_animation_scale=1.0" "$OUTPUT"
 }
 
 test_fake_tv_uninstall_removes_the_package_and_its_files() {
@@ -106,8 +189,7 @@ test_fake_tv_ignored_home_press_keeps_focus() {
   fake_tv_fault ignore-writes focus
   adb_fake shell pm disable-user --user 0 com.google.android.apps.tv.launcherx
   adb_fake shell input keyevent KEYCODE_HOME
-  assert_equals com.google.android.apps.tv.launcherx/com.google.android.apps.tv.launcherx.home.HomeActivity \
-    "$(fake_tv_focus)"
+  assert_equals null "$(fake_tv_focus)"
 }
 
 test_fake_tv_goes_offline_after_a_chosen_write() {

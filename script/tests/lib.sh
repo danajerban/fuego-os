@@ -29,6 +29,9 @@ echo "real adb called with: \$*" >> "$TEST_DIR/real-adb-calls"
 exit 99
 EOF
   chmod +x "$TEST_DIR/bin/adb"
+  # Waiting for the TV (after a Home press) takes no time in tests.
+  printf '#!/bin/sh\nexit 0\n' > "$TEST_DIR/bin/sleep"
+  chmod +x "$TEST_DIR/bin/sleep"
   export PATH="$TEST_DIR/bin:$PATH"
   export FUEGO_ADB="$TESTS/fake-adb"
   fake_tv_new
@@ -71,6 +74,14 @@ with_list_entry() {
     FUEGO="$TEST_DIR/repo/script/fuego"
   fi
   printf '%s\n' "$2" >> "$TEST_DIR/repo/lists/$1"
+}
+
+# launcher_apk: writes a fake Launcher APK (the fake TV reads its "package=" and "home=" lines)
+# and prints its path.
+launcher_apk() {
+  printf 'package=io.github.danajerban.fuegoos\nhome=io.github.danajerban.fuegoos/.HomeActivity\n' \
+    > "$TEST_DIR/launcher.apk"
+  echo "$TEST_DIR/launcher.apk"
 }
 
 # The Snapshot apply keeps on the Mac (HOME is the test's own).
@@ -151,12 +162,13 @@ com.spotify.tv.android user
 com.stremio.one user
 EOF
 
+  # The Stock Launcher outranks the setup wizard, which outranks any app the owner installs
+  # (docs/research/android-tv-launchers.md section 2).
   cat > "$FAKE_TV/home-activities" <<'EOF'
-com.google.android.apps.tv.launcherx/com.google.android.apps.tv.launcherx.home.HomeActivity
-com.google.android.tungsten.setupwraith/com.google.android.tungsten.setupwraith.FallbackHomeActivity
+com.google.android.apps.tv.launcherx/.home.HomeActivity 2
+com.google.android.tungsten.setupwraith/.RecoveryActivity 1
 EOF
-  echo "com.google.android.apps.tv.launcherx/com.google.android.apps.tv.launcherx.home.HomeActivity" \
-    > "$FAKE_TV/focus"
+  echo com.google.android.apps.tv.launcherx/.home.HomeActivity > "$FAKE_TV/focus"
 
   fake_tv_setting global window_animation_scale 1.0
   fake_tv_setting global transition_animation_scale 1.0
@@ -246,7 +258,14 @@ fake_tv_process() {
   printf '%s\n' "$2" > "$FAKE_TV/processes/$1"
 }
 
-# fake_tv_home: the activity the Home button opens now. fake_tv_focus: the focused activity.
+# fake_tv_home_activity COMPONENT PRIORITY: one more activity answers the Home intent.
+fake_tv_home_activity() {
+  [ -f "$FAKE_TV/packages/${1%%/*}" ] || fake_tv_install_package "${1%%/*}" system
+  printf '%s %s\n' "$1" "$2" >> "$FAKE_TV/home-activities"
+}
+
+# fake_tv_home: the activity the Home button opens now. fake_tv_focus: the focused activity, or
+# "null".
 fake_tv_home() {
   # Inspecting is not logged and ignores faults, so the log holds only what the script did.
   FAKE_TV_INSPECT=1 "$TESTS/fake-adb" shell cmd package resolve-activity --brief \

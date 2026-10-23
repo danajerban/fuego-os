@@ -80,7 +80,7 @@ package.com.google.android.youtube.tv=enabled
 package.com.netflix.ninja=enabled
 package.com.spotify.tv.android=enabled
 package.com.stremio.one=missing
-home=com.google.android.apps.tv.launcherx/com.google.android.apps.tv.launcherx.home.HomeActivity
+home=com.google.android.apps.tv.launcherx/.home.HomeActivity
 setting.global.window_animation_scale=1.0
 setting.global.transition_animation_scale=1.0
 setting.global.animator_duration_scale=null
@@ -89,6 +89,24 @@ setting.secure.screensaver_enabled=1
 setting.secure.screensaver_activate_on_sleep=0
 setting.secure.screensaver_activate_on_dock=null
 launcher=missing" "$(snapshot_fields)" "Snapshot"
+}
+
+test_apply_saves_every_setting_alongside_the_snapshot_once() {
+  fake_tv_setting system screen_off_timeout 600000
+  run_fuego apply
+  assert_status 0
+  local dir
+  dir=$(dirname "$(snapshot_file)")
+  assert_equals "screensaver_components=com.google.android.apps.tv.dreamx/.service.Backdrop
+screensaver_enabled=1" "$(cat "$dir/snapshot-settings-secure")" "secure settings"
+  assert_equals "transition_animation_scale=1.0
+window_animation_scale=1.0" "$(cat "$dir/snapshot-settings-global")" "global settings"
+  assert_equals "screen_off_timeout=600000" "$(cat "$dir/snapshot-settings-system")" "system settings"
+  cp -R "$dir" "$TEST_DIR/first"
+  fake_tv_setting secure screensaver_enabled 0
+  run_fuego apply
+  assert_status 0
+  diff -r "$TEST_DIR/first" "$dir" || fail "the second apply rewrote the Snapshot or its settings"
 }
 
 test_apply_records_disabled_packages_and_an_installed_launcher() {
@@ -117,7 +135,7 @@ test_apply_again_changes_nothing_and_keeps_the_snapshot() {
   assert_no_writes
   cmp -s "$TEST_DIR/first-snapshot" "$(snapshot_file)" || fail "the Snapshot was rewritten"
   assert_output_contains "Snapshot: kept from the first apply ($(snapshot_file)); it is never overwritten"
-  assert_output_contains "Summary: 0 disabled, 0 skipped, 3 already off, 0 failed; 0 settings changed"
+  assert_output_contains "Summary: 0 disabled, 0 skipped, 3 already off, 0 failed; 0 other changes"
 }
 
 test_apply_keeps_the_snapshot_in_fuego_state_dir() {
@@ -150,7 +168,7 @@ test_apply_dry_run_lists_the_changes_and_writes_nothing_anywhere() {
   assert_output_contains "would disable com.google.android.tvrecommendations"
   assert_output_contains "already off  com.google.android.katniss"
   assert_output_contains "would set    window_animation_scale 1.0 -> 0.5"
-  assert_output_contains "Summary (dry run): 2 to disable, 0 skipped, 1 already off, 0 failed; 3 settings to change"
+  assert_output_contains "Summary (dry run): 2 to disable, 0 skipped, 1 already off, 0 failed; 3 other changes to make"
   assert_equals "" "$(fake_tv_calls | grep -v '^read ')" "calls other than reads"
   rm "$FAKE_TV/calls" "$TEST_DIR/tv-before/calls"
   diff -r "$TEST_DIR/tv-before" "$FAKE_TV" || fail "the dry run changed the TV"

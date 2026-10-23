@@ -1,6 +1,8 @@
 # Takeover Packages: only the Home Takeover disables them, after the Launcher is Home.
 # Never on the Known-Bloat List (lists/check.sh enforces it).
+# The Home Takeover disables them in this order and re-enables them in reverse: the setup wizard
+# goes off first, so Home never lands on it alone (docs/research/android-tv-launchers.md section 2).
 # Format: package|confirmed_on_tv|reason  (see lists/README.md)
 # From research (docs/research/), confirm each entry with probe.
-com.google.android.apps.tv.launcherx|false|Stock Launcher: the ads and recommendation rows, replaced by the Launcher
 com.google.android.tungsten.setupwraith|false|Setup wizard: a fallback Home that brings the Stock Launcher back
+com.google.android.apps.tv.launcherx|false|Stock Launcher: the ads and recommendation rows, replaced by the Launcher

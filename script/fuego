@@ -31,10 +31,14 @@ Commands:
   probe                    report the TV's chip, RAM, storage, Android build, every package
                            with the lists it is on, and its available memory, Launcher memory
                            and Home draw time. Changes nothing (Home is restarted to time it)
-  apply [--dry-run]        save the Snapshot (first run only), disable the Known-Bloat List,
-                           set animation scales to 0.5, and measure before and after. Safe to
-                           run again. --dry-run: list what would change and write nothing
-  restore                  put package states and animation scales back to the Snapshot
+  apply [--dry-run] [--launcher APK]
+                           save the Snapshot (first run only), disable the Known-Bloat List,
+                           set animation scales to 0.5, install the Launcher from APK, make it
+                           what Home opens (after your yes), and measure before and after. Safe
+                           to run again: it redoes the Home Takeover if a TV update undid it.
+                           --dry-run: list what would change and write nothing
+  restore                  put package states, animation scales and Home back to the Snapshot,
+                           and uninstall the Launcher
 
 The Snapshot is kept on this Mac at $SNAPSHOT
 (set FUEGO_STATE_DIR to keep it elsewhere).
@@ -52,8 +56,9 @@ die() {
   exit 1
 }
 
+# adb reads whatever waits on its input; it gets none, so the owner's answers stay for the script.
 adb_call() {
-  "$FUEGO_ADB" "$@"
+  "$FUEGO_ADB" "$@" < /dev/null
 }
 
 # --- Tools on the Mac --------------------------------------------------------------------
@@ -311,6 +316,7 @@ tv_packages() {
 # list_names PACKAGE: the names of the lists PACKAGE is on, comma-separated; empty when none.
 list_names() {
   local names=""
+  [ "$1" = "$LAUNCHER_PACKAGE" ] && names="the Launcher"
   contains "$KEEP_LIST" "$1" && names="Keep List"
   contains "$MUST_KEEP_LIST" "$1" && names="${names:+$names, }Must-Keep List"
   contains "$KNOWN_BLOAT_LIST" "$1" && names="${names:+$names, }Known-Bloat List"
@@ -439,14 +445,15 @@ CHANGED_COUNT=0
 FAILED_COUNT=0
 
 # outcome KIND TEXT: one report line, counted for the summary. KIND is one of: disabled,
-# "already off", skipped, changed, unchanged, failed, or "would ..." in a dry run.
+# "already off", skipped, changed, installed, uninstalled, unchanged, failed, checked (a check
+# that passed), "not done" (a step left out), or "would ..." in a dry run.
 outcome() {
   case "$1" in
     disabled | "would disable") DISABLED_COUNT=$((DISABLED_COUNT + 1)) ;;
     "already off") ALREADY_COUNT=$((ALREADY_COUNT + 1)) ;;
     skipped) SKIPPED_COUNT=$((SKIPPED_COUNT + 1)) ;;
     failed) FAILED_COUNT=$((FAILED_COUNT + 1)) ;;
-    unchanged) ;;
+    unchanged | checked | "not done" | "would ask" | "would check") ;;
     *) CHANGED_COUNT=$((CHANGED_COUNT + 1)) ;;
   esac
   printf '  %-12s %s\n' "$1" "$2"
@@ -482,9 +489,12 @@ set_package_state() {
     *"new state: "*) ;;
     *) error=$(printf '%s\n' "$output" | grep -m 1 -e 'Exception:' -e '^Error') ;;
   esac
-  now=$(package_state "$pkg")
+  now=$(package_state "$pkg" 2> /dev/null)
   if [ "$now" = "$want" ]; then
     outcome "$want" "$pkg"
+  elif [ "$(adb_call get-state 2>&1)" != device ]; then
+    outcome failed "$pkg (no answer from the TV after pm $command)"
+    return 1
   else
     outcome failed "$pkg (still $now after pm $command${error:+: $error})"
     return 1
@@ -583,10 +593,22 @@ snapshot_fields() {
   fi
 }
 
-# take_snapshot: saves the Snapshot unless one exists, before apply changes anything. It is
-# written once and never overwritten, so a later run can't erase the way back. Stops on failure.
+# Beside the Snapshot, a full copy of each settings namespace as `settings list` prints it
+# (KEY=VALUE lines), so restore can read the original value of any setting, named in the
+# Snapshot's fields or not. Written with the Snapshot, under the same rules.
+SETTINGS_NAMESPACES="global secure system"
+
+# snapshot_settings_file NAMESPACE: where that namespace's copy is kept.
+snapshot_settings_file() {
+  printf '%s\n' "$STATE_DIR/snapshot-settings-$1"
+}
+
+# take_snapshot: saves the Snapshot and its settings copies unless the Snapshot exists, before
+# apply changes anything. They are written once and never overwritten, so a later run can't erase
+# the way back. Stops on failure. The Snapshot is moved into place last: once it is there, so are
+# the copies.
 take_snapshot() {
-  local fields
+  local fields ns settings
   if [ -f "$SNAPSHOT" ]; then
     say "Snapshot: kept from the first apply ($SNAPSHOT); it is never overwritten"
     return 0
@@ -596,16 +618,36 @@ take_snapshot() {
     return 0
   fi
   fields=$(snapshot_fields)
-  if ! mkdir -p "$STATE_DIR" 2> /dev/null || ! {
+  mkdir -p "$STATE_DIR" 2> /dev/null || snapshot_failed
+  for ns in $SETTINGS_NAMESPACES; do
+    settings=$(adb_call shell settings list "$ns" 2> /dev/null) || snapshot_failed
+    {
+      [ -z "$settings" ] || printf '%s\n' "$settings" | tr -d '\r'
+    } 2> /dev/null > "$(snapshot_settings_file "$ns").new" || snapshot_failed
+  done
+  {
     say "# fuego-os Snapshot: the TV as it was before apply first changed it."
     say "# Written once and never overwritten. fuego restore puts the TV back to it."
+    say "# Every setting's original value is in the snapshot-settings-* files beside it."
     say "taken=$(date '+%Y-%m-%d %H:%M')"
     printf '%s\n' "$fields"
-  } 2> /dev/null > "$SNAPSHOT.new" || ! mv "$SNAPSHOT.new" "$SNAPSHOT"; then
-    rm -f "$SNAPSHOT.new" 2> /dev/null
-    die "Can't save the Snapshot to $SNAPSHOT, so nothing was changed on the TV."
-  fi
+  } 2> /dev/null > "$SNAPSHOT.new" || snapshot_failed
+  for ns in $SETTINGS_NAMESPACES; do
+    mv "$(snapshot_settings_file "$ns").new" "$(snapshot_settings_file "$ns")" 2> /dev/null ||
+      snapshot_failed
+  done
+  mv "$SNAPSHOT.new" "$SNAPSHOT" 2> /dev/null || snapshot_failed
   say "Snapshot: saved to $SNAPSHOT"
+}
+
+# snapshot_failed: removes what take_snapshot half wrote and stops before any change to the TV.
+snapshot_failed() {
+  local ns
+  rm -f "$SNAPSHOT.new" 2> /dev/null
+  for ns in $SETTINGS_NAMESPACES; do
+    rm -f "$(snapshot_settings_file "$ns").new" 2> /dev/null
+  done
+  die "Can't save the Snapshot to $SNAPSHOT, so nothing was changed on the TV."
 }
 
 # --- Apply steps ---------------------------------------------------------------------------
@@ -643,12 +685,244 @@ apply_speed_settings() {
   done
 }
 
-cmd_apply() {
-  case "${1-}" in
-    --dry-run) DRY_RUN=1 ;;
-    "") ;;
-    *) usage >&2; exit 2 ;;
+# --- Launcher and Home Takeover ----------------------------------------------------------------
+
+# The Launcher's Home activity (launcher/app/src/main/AndroidManifest.xml).
+LAUNCHER_HOME="$LAUNCHER_PACKAGE/.HomeActivity"
+
+# The APK given with apply --launcher.
+LAUNCHER_APK=""
+
+# launcher_apk: the Launcher APK apply installs, or nothing when there is none to install. This is
+# the one place that decides where the APK comes from; for now, only a local file given with
+# --launcher.
+launcher_apk() {
+  printf '%s\n' "$LAUNCHER_APK"
+}
+
+# Set by apply_launcher once the Launcher is on the TV (or would be, in a dry run).
+LAUNCHER_READY=""
+
+# Installs the Launcher, a step of its own before the Home Takeover touches the Stock Launcher.
+# The install is read back: adb reports Success and the TV lists the Launcher as enabled.
+apply_launcher() {
+  local apk output error
+  say "Launcher"
+  apk=$(launcher_apk)
+  if [ -z "$apk" ]; then
+    if [ "$(package_state "$LAUNCHER_PACKAGE")" = missing ]; then
+      outcome "not done" "Launcher: not on the TV, and no APK given (fuego apply --launcher APK)"
+    else
+      outcome unchanged "$LAUNCHER_PACKAGE already installed"
+      LAUNCHER_READY=1
+    fi
+    return 0
+  fi
+  if [ -n "$DRY_RUN" ]; then
+    outcome "would install" "$LAUNCHER_PACKAGE from $apk"
+    LAUNCHER_READY=1
+    return 0
+  fi
+  output=$(adb_call install -r "$apk" 2>&1)
+  if [ "$(printf '%s\n' "$output" | tail -n 1 | tr -d '\r')" = Success ] &&
+    [ "$(package_state "$LAUNCHER_PACKAGE")" = enabled ]; then
+    outcome installed "$LAUNCHER_PACKAGE from $apk"
+    LAUNCHER_READY=1
+  else
+    error=$(printf '%s\n' "$output" | grep -m 1 -e '^adb: ' -e 'Failure')
+    outcome failed "$LAUNCHER_PACKAGE (not installed from $apk${error:+: $error})"
+  fi
+}
+
+# home_role_holder: the package the TV keeps as the chosen Home. It is how set-home-activity is
+# read back, because Home itself keeps opening the Stock Launcher while that is enabled.
+home_role_holder() {
+  adb_call shell cmd role get-role-holders --user 0 android.app.role.HOME | tr -d '\r' | tail -n 1
+}
+
+# set_home COMPONENT: makes COMPONENT the chosen Home and reads it back. Prints the outcome; fails
+# when the TV does not hold COMPONENT's package as Home afterwards.
+set_home() {
+  local want=$1 output error="" now
+  if [ -n "$DRY_RUN" ]; then
+    outcome "would set" "Home activity -> $want"
+    return 0
+  fi
+  output=$(adb_call shell cmd package set-home-activity "$want" 2>&1)
+  case "$output" in
+    Success*) ;;
+    *) error=$(printf '%s\n' "$output" | grep -m 1 -e '^Error' -e 'Exception:') ;;
   esac
+  now=$(home_role_holder)
+  if [ "$now" = "${want%%/*}" ]; then
+    outcome changed "Home activity -> $want"
+  else
+    outcome failed "Home activity (still ${now:-none} after set-home-activity${error:+: $error})"
+    return 1
+  fi
+}
+
+# takeover_packages_on: the Takeover Packages that are enabled now, in the list's order.
+takeover_packages_on() {
+  local pkg
+  for pkg in $TAKEOVER_PACKAGES; do
+    [ "$(package_state "$pkg")" = enabled ] && printf '%s\n' "$pkg"
+  done
+}
+
+# owner_says_yes: the Wi-Fi warning, then the owner's answer. Only "yes" goes on.
+owner_says_yes() {
+  local answer=""
+  say "  Disabling the setup wizard can delete the Wi-Fi network saved during the TV's setup. If the"
+  say "  TV leaves the network, join it again on the TV in Settings > Network & Internet."
+  printf '  Type yes to disable the Takeover Packages: ' >&2
+  read -r answer || true
+  [ -t 0 ] || say >&2
+  [ "$answer" = yes ]
+}
+
+# focused_app: the activity the TV's window manager has focused (mFocusedApp in dumpsys window),
+# or "null". Fails when the TV does not answer.
+focused_app() {
+  local output
+  output=$(adb_call shell dumpsys window) || return 1
+  printf '%s\n' "$output" | tr -d '\r' | sed -n \
+    -e 's/^ *mFocusedApp=null.*/null/p' \
+    -e 's/^ *mFocusedApp=ActivityRecord{[^ ]* [^ ]* \([^ }]*\).*/\1/p' | head -n 1
+}
+
+# How many times to look for the Launcher's focus after a Home press, a second apart. A cold start
+# of the Launcher on an API 34 emulator takes more than two seconds.
+FOCUS_CHECKS=10
+
+# home_press_opens_launcher: presses Home and waits for the Launcher to have focus. Sets FOCUS to
+# what had focus last. Fails when the Launcher never gets it.
+home_press_opens_launcher() {
+  local check=1
+  adb_call shell input keyevent KEYCODE_HOME > /dev/null 2>&1 || tv_still_reachable
+  while :; do
+    FOCUS=$(focused_app) || tv_still_reachable
+    [ "${FOCUS%%/*}" = "$LAUNCHER_PACKAGE" ] && return 0
+    [ "$check" -ge "$FOCUS_CHECKS" ] && return 1
+    check=$((check + 1))
+    sleep 1
+  done
+}
+
+# tv_still_reachable: stops with the way back when the TV has left the network since the Home
+# Takeover began. Disabling the setup wizard can delete the Wi-Fi network saved during setup.
+tv_still_reachable() {
+  local output
+  output=$(adb_call get-state 2>&1)
+  [ "$output" = device ] && return 0
+  {
+    say
+    say "The TV can't be reached since the Home Takeover ($output)."
+    say "Disabling the setup wizard can delete the Wi-Fi network saved during the TV's setup."
+    say "On the TV:"
+    say "  1. Open Settings > Network & Internet and join your Wi-Fi network again."
+    say "  2. Open $WIRELESS_DEBUGGING and turn it back on."
+    say "On this Mac:"
+    say "  3. fuego connect IP:PORT, with the IP address & Port shown on that screen."
+    say "  4. fuego restore, to give Home back to the Stock Launcher and re-enable the Takeover Packages."
+    say "Step by step: $SETUP_DOC"
+  } >&2
+  exit 1
+}
+
+# roll_back_takeover TURNED_OFF HOME_BEFORE: re-enables the Takeover Packages this run turned off
+# (in reverse order) and, when HOME_BEFORE is given, makes it Home again, leaving the TV as it was
+# before the Home Takeover.
+roll_back_takeover() {
+  local pkg reversed=""
+  say "  Rolling back to the TV as it was before the Home Takeover:"
+  for pkg in $1; do
+    reversed="$pkg $reversed"
+  done
+  for pkg in $reversed; do
+    set_package_state "$pkg" enabled
+  done
+  [ -z "$2" ] || set_home "$2"
+  adb_call shell input keyevent KEYCODE_HOME > /dev/null 2>&1
+  tv_still_reachable
+}
+
+# The Home Takeover: the Launcher becomes what Home opens. It chooses the Launcher as Home, then,
+# after the owner's yes to the Wi-Fi warning, disables the Takeover Packages, presses Home and checks
+# the Launcher has focus, rolling back when it doesn't. Every apply checks Home still opens the
+# Launcher and takes over again when a TV update undid it.
+apply_home_takeover() {
+  local home on pkg turned_off="" home_before=""
+  say "Home Takeover"
+  if [ -z "$LAUNCHER_READY" ]; then
+    outcome "not done" "Home Takeover: the Launcher is not on the TV"
+    return 0
+  fi
+  home=$(home_activity) || home=none
+  on=$(takeover_packages_on)
+  if [ "${home%%/*}" = "$LAUNCHER_PACKAGE" ] && [ -z "$on" ]; then
+    outcome unchanged "Home opens the Launcher ($home)"
+    return 0
+  fi
+  [ "$home" = none ] || say "  Home opens $home, not the Launcher."
+
+  if [ "$(home_role_holder)" = "$LAUNCHER_PACKAGE" ]; then
+    outcome unchanged "Home activity already $LAUNCHER_HOME"
+  else
+    set_home "$LAUNCHER_HOME" || return 0
+    case "$home" in none | "$LAUNCHER_PACKAGE"/*) ;; *) home_before=$home ;; esac
+  fi
+
+  if [ -n "$on" ]; then
+    if [ -n "$DRY_RUN" ]; then
+      outcome "would ask" "the owner's yes to the Wi-Fi warning"
+    elif ! owner_says_yes; then
+      outcome "not done" "Home Takeover: no yes from the owner, so the Takeover Packages stay on"
+      return 0
+    fi
+    for pkg in $on; do
+      if ! set_package_state "$pkg" disabled; then
+        tv_still_reachable
+        [ "$(package_state "$pkg")" = disabled ] && turned_off="$turned_off $pkg"
+        roll_back_takeover "$turned_off" "$home_before"
+        return 0
+      fi
+      turned_off="$turned_off $pkg"
+    done
+  fi
+
+  if [ -n "$DRY_RUN" ]; then
+    outcome "would check" "a Home press opens the Launcher"
+    return 0
+  fi
+  if home_press_opens_launcher; then
+    outcome checked "a Home press opens the Launcher ($FOCUS)"
+  else
+    outcome failed "Home Takeover: a Home press opened ${FOCUS:-nothing}, not the Launcher"
+    roll_back_takeover "$turned_off" "$home_before"
+    return 0
+  fi
+  tv_still_reachable
+  outcome checked "the TV is still on the network"
+}
+
+cmd_apply() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run) DRY_RUN=1 ;;
+      --launcher)
+        [ $# -ge 2 ] || { usage >&2; exit 2; }
+        LAUNCHER_APK=$2
+        shift
+        ;;
+      *) usage >&2; exit 2 ;;
+    esac
+    shift
+  done
+  if [ -n "$LAUNCHER_APK" ] && [ ! -f "$LAUNCHER_APK" ]; then
+    say "No Launcher APK at $LAUNCHER_APK." >&2
+    exit 2
+  fi
   load_lists
   require_tv
   if [ -n "$DRY_RUN" ]; then
@@ -665,17 +939,21 @@ cmd_apply() {
   say
   apply_speed_settings
   say
+  apply_launcher
+  say
+  apply_home_takeover
+  say
   print_unlisted "$(unlisted_packages)"
   say
   if [ -n "$DRY_RUN" ]; then
     say "Summary (dry run): $DISABLED_COUNT to disable, $SKIPPED_COUNT skipped, $ALREADY_COUNT already off," \
-      "$FAILED_COUNT failed; $CHANGED_COUNT settings to change"
+      "$FAILED_COUNT failed; $CHANGED_COUNT other changes to make"
   else
     say "After"
     print_measurements
     say
     say "Summary: $DISABLED_COUNT disabled, $SKIPPED_COUNT skipped, $ALREADY_COUNT already off," \
-      "$FAILED_COUNT failed; $CHANGED_COUNT settings changed"
+      "$FAILED_COUNT failed; $CHANGED_COUNT other changes"
   fi
   [ "$FAILED_COUNT" -eq 0 ]
 }
@@ -712,6 +990,53 @@ restore_animation_scales() {
   done
 }
 
+# Home goes back to the Snapshot's Home activity. It runs after restore_packages, because the TV
+# refuses a Home activity whose package is disabled.
+restore_home() {
+  local want
+  say "Home"
+  want=$(snapshot_value home)
+  if [ "$want" = none ]; then
+    outcome unchanged "no Home activity in the Snapshot"
+  elif [ "$(home_role_holder)" = "${want%%/*}" ]; then
+    outcome unchanged "Home activity already $want"
+  else
+    set_home "$want"
+  fi
+}
+
+# The Launcher is uninstalled unless it was on the TV before the first apply. It goes last, and
+# only once Home no longer opens it, so Home never points at a missing app. Then Home is checked
+# against the Snapshot.
+restore_launcher() {
+  local want home output
+  say "Launcher"
+  want=$(snapshot_value home)
+  home=$(home_activity) || home=none
+  if [ "$(snapshot_value launcher)" = installed ]; then
+    outcome unchanged "$LAUNCHER_PACKAGE kept: it was installed before the first apply"
+  elif [ "$(package_state "$LAUNCHER_PACKAGE")" = missing ]; then
+    outcome unchanged "$LAUNCHER_PACKAGE already uninstalled"
+  elif [ "${home%%/*}" = "$LAUNCHER_PACKAGE" ]; then
+    outcome failed "$LAUNCHER_PACKAGE kept: Home still opens it, and without it Home would open nothing"
+  else
+    output=$(adb_call uninstall "$LAUNCHER_PACKAGE" 2>&1)
+    if [ "$(package_state "$LAUNCHER_PACKAGE")" = missing ]; then
+      outcome uninstalled "$LAUNCHER_PACKAGE"
+    else
+      outcome failed "$LAUNCHER_PACKAGE (still installed after uninstall: $(printf '%s\n' "$output" | tail -n 1))"
+    fi
+    home=$(home_activity) || home=none
+  fi
+  if [ "$want" = none ]; then
+    return 0
+  elif [ "$home" = "$want" ]; then
+    outcome checked "Home opens $home, as in the Snapshot"
+  else
+    outcome failed "Home opens $home, not $want as in the Snapshot"
+  fi
+}
+
 cmd_restore() {
   [ $# -eq 0 ] || { usage >&2; exit 2; }
   load_lists
@@ -724,6 +1049,10 @@ cmd_restore() {
   restore_packages
   say
   restore_animation_scales
+  say
+  restore_home
+  say
+  restore_launcher
   say
   say "Summary: $((DISABLED_COUNT + CHANGED_COUNT)) changed back," \
     "$((SKIPPED_COUNT + FAILED_COUNT)) not changed back"
