@@ -58,4 +58,38 @@ class Tv {
         }
         error("Could not move focus to the $label tile; focus is on ${focusedTile()}")
     }
+
+    /** The Launcher's Inputs screen, or null when it is not on screen. */
+    fun inputsScreen(timeoutMs: Long = 5_000): UiObject2? =
+        device.wait(Until.findObject(By.res(LAUNCHER, "inputs_screen")), timeoutMs)
+
+    /** The rows of the inputs list; an empty list has no size, so it is not on screen at all. */
+    private fun inputRows(): List<UiObject2> =
+        device.findObject(By.res(LAUNCHER, "inputs"))?.children.orEmpty()
+
+    /** The names the Inputs screen lists, top to bottom. */
+    fun inputNames(): List<String> =
+        inputRows().sortedBy { it.visibleBounds.top }.map { it.text }
+
+    /** The message the Inputs screen shows in place of inputs, or null when it shows none. */
+    fun inputsMessage(): String? =
+        device.findObject(By.res(LAUNCHER, "no_inputs"))?.text
+
+    /** The name of the input that has focus on the Inputs screen, or null when none has. */
+    fun focusedInput(): String? =
+        inputRows().firstOrNull { it.isFocused }?.text
+
+    /** Moves focus down the Inputs screen until the input named [name] has it. */
+    fun focusInput(name: String) {
+        repeat(inputNames().size) {
+            if (focusedInput() == name) return
+            device.pressDPadDown()
+            device.waitForIdle()
+        }
+        if (focusedInput() != name) error("Could not move focus to the input $name; focus is on ${focusedInput()}")
+    }
+
+    /** Waits until [text] is on screen, and returns whether it came. */
+    fun waitForText(text: String, timeoutMs: Long = 10_000): Boolean =
+        device.wait(Until.hasObject(By.text(text)), timeoutMs) == true
 }

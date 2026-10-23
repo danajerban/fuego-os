@@ -5,5 +5,7 @@
     <string name="tile_youtube" translatable="false">YouTube</string>
     <string name="tile_stremio" translatable="false">Stremio</string>
     <string name="tile_spotify" translatable="false">Spotify</string>
+    <string name="tile_inputs">Inputs</string>
+    <string name="inputs_none">No HDMI inputs found</string>
     <string name="tile_settings">Settings</string>
 </resources>
