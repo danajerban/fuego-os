@@ -151,12 +151,13 @@ com.spotify.tv.android user
 com.stremio.one user
 EOF
 
+  # The Stock Launcher outranks the setup wizard, which outranks any app the owner installs
+  # (docs/research/android-tv-launchers.md section 2).
   cat > "$FAKE_TV/home-activities" <<'EOF'
-com.google.android.apps.tv.launcherx/com.google.android.apps.tv.launcherx.home.HomeActivity
-com.google.android.tungsten.setupwraith/com.google.android.tungsten.setupwraith.FallbackHomeActivity
+com.google.android.apps.tv.launcherx/.home.HomeActivity 2
+com.google.android.tungsten.setupwraith/.RecoveryActivity 1
 EOF
-  echo "com.google.android.apps.tv.launcherx/com.google.android.apps.tv.launcherx.home.HomeActivity" \
-    > "$FAKE_TV/focus"
+  echo com.google.android.apps.tv.launcherx/.home.HomeActivity > "$FAKE_TV/focus"
 
   fake_tv_setting global window_animation_scale 1.0
   fake_tv_setting global transition_animation_scale 1.0
@@ -246,7 +247,14 @@ fake_tv_process() {
   printf '%s\n' "$2" > "$FAKE_TV/processes/$1"
 }
 
-# fake_tv_home: the activity the Home button opens now. fake_tv_focus: the focused activity.
+# fake_tv_home_activity COMPONENT PRIORITY: one more activity answers the Home intent.
+fake_tv_home_activity() {
+  [ -f "$FAKE_TV/packages/${1%%/*}" ] || fake_tv_install_package "${1%%/*}" system
+  printf '%s %s\n' "$1" "$2" >> "$FAKE_TV/home-activities"
+}
+
+# fake_tv_home: the activity the Home button opens now. fake_tv_focus: the focused activity, or
+# "null".
 fake_tv_home() {
   # Inspecting is not logged and ignores faults, so the log holds only what the script did.
   FAKE_TV_INSPECT=1 "$TESTS/fake-adb" shell cmd package resolve-activity --brief \

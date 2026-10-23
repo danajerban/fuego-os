@@ -5,9 +5,11 @@
 # plain files in $FAKE_TV (made by fake_tv_new in lib.sh):
 #
 #   packages/<package>     "<state> <kind>": state enabled|disabled-user|disabled, kind system|user
-#   home-activities        components that answer the Home intent, in fallback order
+#   home-activities        "<component> <priority>" for each activity that answers the Home intent.
+#                          Home opens the enabled one with the highest priority; the chosen one
+#                          wins only among equals, and two equals with none chosen give the chooser
 #   home                   the Home activity set with set-home-activity (absent: none chosen)
-#   focus                  the focused activity
+#   focus                  the focused activity, or "null"
 #   settings/<ns>/<key>    settings values (ns: global, secure, system)
 #   props/<name>           getprop values
 #   meminfo                "<MemTotal kB> <MemAvailable kB>"
@@ -159,25 +161,39 @@ set_package_state() {
     read -r state kind < "$tv/packages/$pkg"
     printf '%s %s\n' "$new" "$kind" > "$tv/packages/$pkg"
     # Disabling a package stops it.
-    [ "$new" = enabled ] || rm -f "$tv/processes/$pkg"
+    [ "$new" = enabled ] || stop_package "$pkg"
   fi
   echo "Package $pkg new state: $new"
 }
 
+# stop_package PACKAGE: the package stops running, and its activity loses focus.
+stop_package() {
+  rm -f "$tv/processes/$1"
+  case "$(cat "$tv/focus")" in "$1"/*) echo null > "$tv/focus" ;; esac
+}
+
 # The fake APK is a text file: "package=<id>" and any number of "home=<component>" lines.
+# An installed app's Home activities get priority 0: Android ignores priority for them.
 install() {
   local apk="" pkg home
   for arg in "$@"; do
     case "$arg" in -*) ;; *) apk=$arg ;; esac
   done
-  [ -f "$apk" ] || die "adb: failed to stat $apk: No such file or directory"
+  if [ ! -f "$apk" ]; then
+    echo "Performing Streamed Install"
+    die "adb: failed to stat $apk: No such file or directory"
+  fi
   pkg=$(sed -n 's/^package=//p' "$apk")
+  if [ -z "$pkg" ]; then
+    echo "Performing Incremental Install"
+    echo "Performing Streamed Install"
+    die "adb: failed to install $apk: Failure [INSTALL_PARSE_FAILED_NOT_APK: Failed to parse /data/app/vmdl2012248553.tmp/base.apk: Failed to load asset path /data/app/vmdl2012248553.tmp/base.apk]"
+  fi
   echo "Performing Streamed Install"
-  [ -n "$pkg" ] || die "adb: failed to install $apk: Failure [INSTALL_PARSE_FAILED_NOT_APK]"
   if ! ignored "$pkg"; then
     printf 'enabled user\n' > "$tv/packages/$pkg"
     sed -n 's/^home=//p' "$apk" | while read -r home; do
-      grep -qxF "$home" "$tv/home-activities" || echo "$home" >> "$tv/home-activities"
+      home_candidate "$home" > /dev/null || echo "$home 0" >> "$tv/home-activities"
     done
   fi
   echo "Success"
@@ -187,7 +203,8 @@ uninstall() {
   local pkg=${1-}
   [ -f "$tv/packages/$pkg" ] || die "Failure [DELETE_FAILED_INTERNAL_ERROR]"
   if ! ignored "$pkg"; then
-    rm -f "$tv/packages/$pkg" "$tv/processes/$pkg"
+    stop_package "$pkg"
+    rm -f "$tv/packages/$pkg"
     rm -rf "$tv/sdcard/Android/data/$pkg"
     grep -v "^$pkg/" "$tv/home-activities" > "$tv/home-activities.new"
     mv "$tv/home-activities.new" "$tv/home-activities"
@@ -197,21 +214,55 @@ uninstall() {
 
 # --- Home and focus ----------------------------------------------------------------------
 
-# The chosen Home activity while its package is enabled, otherwise the first enabled one.
-resolve_home() {
-  local chosen component
-  chosen=$(cat "$tv/home" 2>/dev/null)
-  if [ -n "$chosen" ] && package_enabled "${chosen%%/*}" && grep -qxF "$chosen" "$tv/home-activities"; then
-    echo "$chosen"
-    return 0
-  fi
-  while read -r component; do
-    if package_enabled "${component%%/*}"; then
-      echo "$component"
+# Components print as "package/.Class" (short) or "package/package.Class" (long).
+long_form() {
+  local pkg=${1%%/*} class=${1#*/}
+  case "$class" in .*) class=$pkg$class ;; esac
+  echo "$pkg/$class"
+}
+
+short_form() {
+  local pkg=${1%%/*} class=${1#*/}
+  case "$class" in "$pkg".*) class=${class#"$pkg"} ;; esac
+  echo "$pkg/$class"
+}
+
+# home_candidate COMPONENT: the priority of COMPONENT when it answers the Home intent.
+home_candidate() {
+  local want component priority
+  want=$(long_form "$1")
+  while read -r component priority; do
+    if [ "$(long_form "$component")" = "$want" ]; then
+      echo "$priority"
       return 0
     fi
   done < "$tv/home-activities"
   return 1
+}
+
+# resolve_home: "<priority> <component>" for the activity the Home button opens now.
+resolve_home() {
+  local chosen top="" component priority first="" count=0
+  chosen=$(cat "$tv/home" 2> /dev/null)
+  while read -r component priority; do
+    package_enabled "${component%%/*}" || continue
+    if [ -z "$top" ] || [ "$priority" -gt "$top" ]; then top=$priority; fi
+  done < "$tv/home-activities"
+  [ -n "$top" ] || return 1
+  while read -r component priority; do
+    package_enabled "${component%%/*}" && [ "$priority" = "$top" ] || continue
+    if [ -n "$chosen" ] && [ "$(long_form "$component")" = "$(long_form "$chosen")" ]; then
+      echo "$top $(short_form "$component")"
+      return 0
+    fi
+    count=$((count + 1))
+    [ -n "$first" ] || first=$component
+  done < "$tv/home-activities"
+  if [ "$count" -eq 1 ]; then
+    echo "$top $(short_form "$first")"
+  else
+    echo "0 android/com.android.internal.app.ResolverActivity"
+  fi
 }
 
 resolve_activity() {
@@ -221,20 +272,34 @@ resolve_activity() {
   esac
   local home
   home=$(resolve_home) || { echo "No activity found"; return 0; }
-  echo "priority=0 preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true"
-  echo "$home"
+  echo "priority=${home%% *} preferredOrder=0 match=0x108000 specificIndex=-1 isDefault=true"
+  echo "${home#* }"
 }
 
+# Any installed and enabled package is accepted, whatever the activity; only Home presses show
+# whether the choice took.
 set_home_activity() {
   local component=""
   for arg in "$@"; do
     case "$arg" in --user|0) ;; *) component=$arg ;; esac
   done
-  if ! grep -qxF "$component" "$tv/home-activities" || ! package_enabled "${component%%/*}"; then
-    die "Error: Failed to set default home."
-  fi
+  package_enabled "${component%%/*}" || die "Error: Failed to set default home."
   ignored home || echo "$component" > "$tv/home"
   echo "Success"
+}
+
+# The HOME role: the package chosen with set-home-activity while it is installed, otherwise the
+# package Home opens.
+role_holders() {
+  [ "$*" = "--user 0 android.app.role.HOME" ] || unsupported
+  local chosen home
+  chosen=$(cat "$tv/home" 2> /dev/null)
+  if [ -n "$chosen" ] && [ -f "$tv/packages/${chosen%%/*}" ]; then
+    echo "${chosen%%/*}"
+  elif home=$(resolve_home); then
+    home=${home#* }
+    echo "${home%%/*}"
+  fi
 }
 
 keyevent() {
@@ -242,16 +307,19 @@ keyevent() {
     KEYCODE_HOME | 3)
       local home
       if ! ignored focus && home=$(resolve_home); then
-        echo "$home" > "$tv/focus"
+        echo "${home#* }" > "$tv/focus"
       fi
       ;;
   esac
 }
 
-# As on API 34, the focus lines are in the displays section, not in the window list.
+# As on API 34, the focus lines are in the displays section, not in the window list. The focused
+# window names its activity in long form, the focused app in short form.
 dumpsys_window_windows() {
+  local focus
+  focus=$(cat "$tv/focus")
   echo "WINDOW MANAGER WINDOWS (dumpsys window windows)"
-  echo "  Window #0 Window{5e1f2a u0 $(cat "$tv/focus")}:"
+  [ "$focus" = null ] || echo "  Window #0 Window{5e1f2a u0 $(long_form "$focus")}:"
 }
 
 dumpsys_window() {
@@ -259,8 +327,13 @@ dumpsys_window() {
   focus=$(cat "$tv/focus")
   echo
   echo "WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)"
-  echo "  mCurrentFocus=Window{5e1f2a u0 $focus}"
-  echo "  mFocusedApp=ActivityRecord{8c3d1b u0 $focus t7}"
+  if [ "$focus" = null ]; then
+    echo "  mCurrentFocus=null"
+    echo "  mFocusedApp=null"
+  else
+    echo "  mCurrentFocus=Window{5e1f2a u0 $(long_form "$focus")}"
+    echo "  mFocusedApp=ActivityRecord{8c3d1b u0 $(short_form "$focus") t7}"
+  fi
   dumpsys_window_windows
 }
 
@@ -270,7 +343,7 @@ am_start() {
   [ "$*" = "-W -S -n ${4-}" ] || unsupported
   local component=$4 pkg=${4%%/*} class=${4#*/} total
   echo "Starting: Intent { cmp=$component }"
-  if ! grep -qxF "$component" "$tv/home-activities" || ! package_enabled "$pkg"; then
+  if ! home_candidate "$component" > /dev/null || ! package_enabled "$pkg"; then
     case "$class" in .*) class=$pkg$class ;; esac
     echo "Error type 3"
     echo "Error: Activity class {$pkg/$class} does not exist."
@@ -315,6 +388,14 @@ dumpsys_meminfo() {
 
 settings_get() {
   if [ -f "$tv/settings/$1/$2" ]; then cat "$tv/settings/$1/$2"; else echo null; fi
+}
+
+# settings list NAMESPACE: every set value as "key=value", sorted as the TV sorts them.
+settings_list() {
+  local key
+  (cd "$tv/settings/$1" && LC_ALL=C ls) | while read -r key; do
+    printf '%s=%s\n' "$key" "$(cat "$tv/settings/$1/$key")"
+  done
 }
 
 settings_put() {
@@ -452,9 +533,11 @@ case "$*" in
   "shell pm enable"*) log write; need_device; set_package_state enable "${!#}" enabled ;;
   "shell settings get "*) log read; need_device; settings_get "$4" "$5" ;;
   "shell settings put "*) log write; need_device; settings_put "$4" "$5" "$6" ;;
+  "shell settings list "*) log read; need_device; settings_list "$4" ;;
   "shell settings delete "*) log write; need_device; settings_delete "$4" "$5" ;;
   "shell getprop"*) log read; need_device; shift 2; getprop "$@" ;;
   "shell cmd package resolve-activity"*) log read; need_device; shift 3; resolve_activity "$@" ;;
+  "shell cmd role get-role-holders"*) log read; need_device; shift 4; role_holders "$@" ;;
   "shell cmd package set-home-activity"*) log write; need_device; shift 3; set_home_activity "$@" ;;
   "shell input keyevent"*) log write; need_device; keyevent "${4-}" ;;
   "shell dumpsys window") log read; need_device; dumpsys_window ;;
