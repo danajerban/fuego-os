@@ -3,6 +3,13 @@ package io.github.danajerban.fuegoos
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.BitmapShader
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Shader
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.provider.Settings
 
@@ -56,3 +63,23 @@ fun appIcon(packageManager: PackageManager, packageName: String): Drawable? {
     }
     return if (app.icon == 0) null else app.loadIcon(packageManager)
 }
+
+/**
+ * [icon] drawn once at [size] pixels square and clipped to a rounded square, antialiased, so the apps'
+ * icons look alike in the Dock whatever shape they come in (a hard square PNG, an adaptive icon).
+ * Off the main thread, like [appIcon].
+ */
+fun roundedIcon(resources: Resources, icon: Drawable, size: Int): Drawable {
+    val drawn = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    icon.setBounds(0, 0, size, size)
+    icon.draw(Canvas(drawn))
+    val rounded = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = BitmapShader(drawn, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) }
+    val radius = size * ICON_CORNER
+    Canvas(rounded).drawRoundRect(0f, 0f, size.toFloat(), size.toFloat(), radius, radius, paint)
+    drawn.recycle()
+    return BitmapDrawable(resources, rounded)
+}
+
+/** An app icon's corner radius, as a fraction of its size. */
+private const val ICON_CORNER = 0.22f

@@ -55,6 +55,9 @@ class HomeScreenTest {
         apps.forEach { (label, app) ->
             val shown = tv.waitForTileIcon(label) { tv.mostly(it, app.fakeIconColour) }
             assertTrue("The $label tile does not show its app's icon; seen ${hex(tv.tileIconColours(label).distinct().take(8))}", shown)
+            // The fake's icon is a plain square: rounded, its corners show the tile behind.
+            val corners = tv.tileIconCorners(label, app.fakeIconColour)
+            assertTrue("The $label icon's corners are not rounded off; seen ${hex(corners)}", corners.none { tv.sameColour(it, app.fakeIconColour) })
         }
     }
 

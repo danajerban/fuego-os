@@ -162,6 +162,28 @@ class Tv {
         return false
     }
 
+    /**
+     * The colours on screen (0xRRGGBB) at the four corners of the box around everything of [colour] on the
+     * tile labelled [label]: for a square icon of that colour, the corners of the square.
+     */
+    fun tileIconCorners(label: String, colour: Int): List<Int> {
+        val tile = tileBounds(label)
+        val screen = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            .copy(Bitmap.Config.ARGB_8888, false)
+        val box = Rect(Int.MAX_VALUE, Int.MAX_VALUE, Int.MIN_VALUE, Int.MIN_VALUE)
+        for (y in tile.top until tile.bottom) for (x in tile.left until tile.right) {
+            if (closeColours(screen.getPixel(x, y) and 0xFFFFFF, colour)) {
+                box.set(minOf(box.left, x), minOf(box.top, y), maxOf(box.right, x), maxOf(box.bottom, y))
+            }
+        }
+        check(box.left <= box.right) { "No $label icon on screen" }
+        return listOf(box.left to box.top, box.right to box.top, box.left to box.bottom, box.right to box.bottom)
+            .map { (x, y) -> screen.getPixel(x, y) and 0xFFFFFF }
+    }
+
+    /** Whether [a] and [b] (0xRRGGBB) look the same, give or take a little. */
+    fun sameColour(a: Int, b: Int) = closeColours(a, b)
+
     /** Whether most of [patch] is [colour] (0xRRGGBB): a solid icon of that colour fills it. */
     fun mostly(patch: List<Int>, colour: Int) = patch.count { closeColours(it, colour) } * 2 > patch.size
 

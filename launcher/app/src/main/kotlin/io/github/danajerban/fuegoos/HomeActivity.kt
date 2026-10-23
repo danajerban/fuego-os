@@ -85,6 +85,7 @@ class HomeActivity : Activity() {
      */
     private fun loadAppIcons() {
         val packageManager = packageManager
+        val iconSize = resources.getDimensionPixelSize(R.dimen.dock_tile_icon)
         val appTiles = dockTiles.zip(tileViews).mapNotNull { (tile, view) -> tile.packageName?.let { it to view } }
         iconLoader.execute {
             appTiles.forEach { (packageName, view) ->
@@ -95,7 +96,7 @@ class HomeActivity : Activity() {
                 }
                 if (iconVersions[packageName] == version) return@forEach
                 iconVersions[packageName] = version
-                val icon = appIcon(packageManager, packageName)
+                val icon = appIcon(packageManager, packageName)?.let { roundedIcon(resources, it, iconSize) }
                 view.post { showIcon(view, icon) }
             }
         }
