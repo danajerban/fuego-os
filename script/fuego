@@ -10,6 +10,9 @@ FUEGO_ADB=${FUEGO_ADB:-adb}
 
 SETUP_DOC="https://github.com/danajerban/fuego-os/blob/main/docs/tv-setup.md"
 
+# The Launcher's app ID.
+LAUNCHER_PACKAGE=io.github.danajerban.fuegoos
+
 # The Android platform the Launcher builds against. Keep in step with the Launcher's compileSdk.
 LAUNCHER_SDK_PLATFORM=android-34
 LAUNCHER_BUILD_TOOLS=34.0.0
@@ -360,13 +363,32 @@ home_activity() {
   esac
 }
 
+# launcher_memory: the Launcher's memory (TOTAL PSS from its package memory summary), or why
+# there is none.
+launcher_memory() {
+  local pss
+  if ! contains "$(tv_packages)" "$LAUNCHER_PACKAGE"; then
+    echo "not installed"
+    return 0
+  fi
+  pss=$(adb_call shell dumpsys meminfo "$LAUNCHER_PACKAGE" |
+    sed -n 's/^ *TOTAL PSS: *\([0-9][0-9]*\) .*/\1/p')
+  if [ -n "$pss" ]; then
+    awk -v kb="$pss" 'BEGIN { printf "%.1f MB (PSS)\n", kb / 1024 }'
+  else
+    echo "not running"
+  fi
+}
+
 # print_measurements: the baseline numbers, one indented line each. probe prints them; apply
 # prints them before and after its changes.
-# Available memory is the kernel's MemAvailable. Home draw time is the activity manager's
-# TotalTime for a cold start of the Home activity (am start -W -S), so runs compare like for like.
+# Available memory is the kernel's MemAvailable. Launcher memory is measured before Home is
+# timed, which restarts Home. Home draw time is the activity manager's TotalTime for a cold start
+# of the Home activity (am start -W -S), so runs compare like for like.
 print_measurements() {
   local home timing total
   say "  Available memory:  $(($(meminfo_kb MemAvailable) / 1024)) MB"
+  say "  Launcher memory:   $(launcher_memory)"
   if ! home=$(home_activity); then
     say "  Home draw time:    not measured (no app answers the Home button)"
     return 0
@@ -502,8 +524,6 @@ set_setting() {
 # FUEGO_STATE_DIR moves it (tests use their own).
 STATE_DIR=${FUEGO_STATE_DIR:-$HOME/Library/Application Support/fuego-os}
 SNAPSHOT="$STATE_DIR/snapshot"
-
-LAUNCHER_PACKAGE=io.github.danajerban.fuegoos
 
 # The screensaver and ambient-mode settings (secure), recorded for the Idle Screen.
 SCREENSAVER_SETTINGS="screensaver_components screensaver_enabled screensaver_activate_on_sleep

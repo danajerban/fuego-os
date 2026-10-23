@@ -186,6 +186,54 @@ Error type 3
 Error: Activity class {no.such.pkg/no.such.pkg.Main} does not exist." "$OUTPUT"
 }
 
+test_fake_tv_disables_and_enables_like_pm_on_a_package_it_does_not_know() {
+  adb_fake shell pm disable-user --user 0 no.such.pkg
+  assert_status 255
+  assert_equals "
+Exception occurred while executing 'disable-user':
+java.lang.IllegalArgumentException: Unknown package: no.such.pkg" "$(printf '%s\n' "$OUTPUT" | sed -n '1,3p')"
+  assert_output_contains "	at com.android.server.pm.PackageManagerService.setEnabledSettings"
+  adb_fake shell pm enable no.such.pkg
+  assert_status 255
+  assert_output_contains "Exception occurred while executing 'enable':"
+}
+
+test_fake_tv_lists_user_disabled_packages_as_disabled() {
+  adb_fake shell pm disable-user --user 0 com.google.android.tvrecommendations
+  adb_fake shell pm disable-user --user 0 com.google.android.tvrecommendations
+  assert_equals "Package com.google.android.tvrecommendations new state: disabled-user" "$OUTPUT"
+  adb_fake shell pm list packages -d
+  assert_equals "package:com.google.android.tvrecommendations" "$OUTPUT"
+  adb_fake shell pm enable com.google.android.tvrecommendations
+  adb_fake shell pm list packages -d
+  assert_equals "" "$OUTPUT"
+}
+
+test_fake_tv_animation_scales_put_and_delete_like_settings() {
+  adb_fake shell settings get global animator_duration_scale
+  assert_equals null "$OUTPUT"
+  adb_fake shell settings put global window_animation_scale 0.5
+  assert_equals "" "$OUTPUT"
+  adb_fake shell settings delete global window_animation_scale
+  assert_equals "Deleted 1 rows" "$OUTPUT"
+  adb_fake shell settings get global window_animation_scale
+  assert_equals null "$OUTPUT"
+  adb_fake shell settings delete global window_animation_scale
+  assert_equals "Deleted 0 rows" "$OUTPUT"
+}
+
+test_fake_tv_reports_a_package_memory_summary() {
+  fake_tv_process com.android.tv.settings 17300
+  adb_fake shell dumpsys meminfo com.android.tv.settings
+  assert_status 0
+  assert_output_contains "** MEMINFO in pid "
+  assert_output_contains " App Summary"
+  assert_output_contains "           TOTAL PSS:    17300            TOTAL RSS:"
+  adb_fake shell dumpsys meminfo com.google.android.apps.tv.launcherx
+  assert_status 0
+  assert_equals "No process found for: com.google.android.apps.tv.launcherx" "$OUTPUT"
+}
+
 test_fake_tv_window_list_has_no_focus_lines() {
   adb_fake shell dumpsys window windows
   assert_output_contains "WINDOW MANAGER WINDOWS (dumpsys window windows)"

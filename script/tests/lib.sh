@@ -121,7 +121,8 @@ fake_tv_new() {
   export FAKE_TV="$TEST_DIR/tv"
   rm -rf "$FAKE_TV"
   mkdir -p "$FAKE_TV/packages" "$FAKE_TV/settings/global" "$FAKE_TV/settings/secure" \
-    "$FAKE_TV/settings/system" "$FAKE_TV/props" "$FAKE_TV/sdcard" "$FAKE_TV/faults" "$FAKE_TV/link"
+    "$FAKE_TV/settings/system" "$FAKE_TV/props" "$FAKE_TV/sdcard" "$FAKE_TV/faults" "$FAKE_TV/link" \
+    "$FAKE_TV/processes"
   : > "$FAKE_TV/calls"
 
   local pkg kind
@@ -238,6 +239,11 @@ fake_tv_storage() {
 # fake_tv_home_draw_ms MS: how long a cold start of Home takes to draw.
 fake_tv_home_draw_ms() {
   printf '%s\n' "$1" > "$FAKE_TV/home-draw-ms"
+}
+
+# fake_tv_process PACKAGE PSS_KB: the package is running and uses PSS_KB of memory.
+fake_tv_process() {
+  printf '%s\n' "$2" > "$FAKE_TV/processes/$1"
 }
 
 # fake_tv_home: the activity the Home button opens now. fake_tv_focus: the focused activity.
