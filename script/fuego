@@ -1028,6 +1028,24 @@ apply_home_takeover() {
   CHECKS_DUE=1
 }
 
+# --- Idle Screen and artwork ----------------------------------------------------------------
+
+# The Idle Screen's dream service (launcher/app/src/main/AndroidManifest.xml).
+IDLE_SCREEN="$LAUNCHER_PACKAGE/.IdleScreen"
+
+# The Idle Screen becomes the TV's screensaver in place of Google's ambient mode, which is the
+# screensaver the TV ships with, and the screensaver is switched on. When it starts (the TV's idle
+# timeout) is never written.
+apply_idle_screen() {
+  say "Idle Screen"
+  if [ -z "$LAUNCHER_READY" ]; then
+    outcome "not done" "Idle Screen: the Launcher is not on the TV"
+    return 0
+  fi
+  set_setting secure screensaver_components "$IDLE_SCREEN"
+  set_setting secure screensaver_enabled 1
+}
+
 # --- Check Step and Casting Fallback --------------------------------------------------------
 
 # Set by apply_home_takeover when the Check Step should follow it.
@@ -1182,6 +1200,8 @@ cmd_apply() {
   apply_launcher
   say
   apply_home_takeover
+  say
+  apply_idle_screen
   say
   if [ -n "$CHECKS_DUE" ]; then
     apply_check_step
