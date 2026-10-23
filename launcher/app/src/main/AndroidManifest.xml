@@ -54,5 +54,17 @@
             android:name=".InputsActivity"
             android:excludeFromRecents="true"
             android:exported="false" />
+
+        <!-- The Idle Screen, the TV's screensaver; the Launcher's only service. Only the system may bind it. -->
+        <service
+            android:name=".IdleScreen"
+            android:exported="true"
+            android:label="@string/idle_screen"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>
