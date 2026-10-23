@@ -41,14 +41,15 @@ Commands:
                            and Home Draw Time (once the Launcher is Home: its Inputs screen is
                            opened, then Home reopened and timed). Changes nothing
   apply [--dry-run] [--skip-checks] [--launcher APK] [--pictures FOLDER]
-                           save the Snapshot (first run only), disable the Known-Bloat List,
-                           set animation scales to 0.5, install the Launcher, make it what Home
-                           opens (after your yes), set its Idle Screen as the screensaver in place
-                           of Google's ambient mode, ask you to check casting, HDMI inputs, Wi-Fi
-                           and the remote's buttons, and measure before and after. If casting is
-                           broken, the setup wizard alone is turned back on. Safe to run again:
-                           it updates the Launcher when the latest release is newer, and redoes
-                           the Home Takeover if a TV update undid it.
+                           save the Snapshot (first run only), set animation scales to 0.5,
+                           install the Launcher, make it what Home opens (after your yes), set its
+                           Idle Screen as the screensaver in place of Google's ambient mode,
+                           disable the Known-Bloat List (a package still the TV's screensaver is
+                           left on), ask you to check casting, HDMI inputs, Wi-Fi and the remote's
+                           buttons, and measure before and after. If casting is broken, the setup
+                           wizard alone is turned back on. Safe to run again: it updates the
+                           Launcher when the latest release is newer, and redoes the Home Takeover
+                           if a TV update undid it.
                            --dry-run: list what would change and write nothing
                            --skip-checks: leave the checks for the next apply
                            --launcher APK: install this APK instead of the one from the latest

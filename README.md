@@ -2,7 +2,7 @@
 
 Makes one Fuego 2K Google TV (Android TV OS 14) fast and free of Bloat, over ADB, without root.
 
-> **Status: pre-release.** The script, the package lists and the Launcher are built and tested against a fake TV and an Android TV emulator, but nothing here has been tried on the TV yet, the package IDs on the lists are still to be confirmed with `probe`, and no release has been made. The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1); the words it uses are in [GLOSSARY.md](GLOSSARY.md), and the decisions behind it in [docs/adr/](docs/adr/).
+> **Status: v0.3.0 is released and running on the owner's Fuego 2K.** The script, the package lists and the Launcher are tested against a fake TV and an Android TV emulator, and the package lists were checked against the real TV with `probe`. The real-TV run is recorded in [ticket #14](https://github.com/danajerban/fuego-os/issues/14) and [docs/research/fuego-2k-packages.md](docs/research/fuego-2k-packages.md). The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1); the words it uses are in [GLOSSARY.md](GLOSSARY.md), and the decisions behind it in [docs/adr/](docs/adr/).
 
 > **Not affiliated with Fuego, Google, Netflix, YouTube, Stremio or Spotify.** Use it at your own risk.
 
@@ -12,7 +12,7 @@ Two pieces:
 
 - **A Mac script** that talks to the TV over ADB:
   - `probe`: reads facts from the TV (chip, RAM, storage, Android build, package list with the lists each package is on), flags packages on none of the lists, measures available memory and, once the Launcher is Home, Home Draw Time, and changes nothing.
-  - `apply`: takes a Snapshot (once, never overwritten), runs Debloat against the reviewed Known-Bloat List, sets the Speed Settings, installs the Launcher, performs the Home Takeover, sets the Idle Screen as the screensaver, then asks you to check casting, HDMI inputs, Wi-Fi and the remote's buttons (the Check Step). It has a dry-run flag and is safe to run again: a rerun updates the Launcher when a newer release is out and redoes the Home Takeover if a TV update undid it.
+  - `apply`: takes a Snapshot (once, never overwritten), sets the Speed Settings, installs the Launcher, performs the Home Takeover, sets the Idle Screen as the screensaver, runs Debloat against the reviewed Known-Bloat List (leaving a package on while it is still the TV's screensaver), then asks you to check casting, HDMI inputs, Wi-Fi and the remote's buttons (the Check Step). It has a dry-run flag and is safe to run again: a rerun updates the Launcher when a newer release is out and redoes the Home Takeover if a TV update undid it.
   - `restore`: puts the TV back to the Snapshot.
 - **A Launcher** of our own: Kotlin with plain Android Views. A glass dock (Netflix, YouTube, Stremio, Spotify, Inputs, Settings) over full-screen artwork, in the style of Home+, and an Idle Screen that replaces Google's ambient mode as the TV's screensaver. No internet permission, and nothing runs while it is off screen except that screensaver.
 
@@ -28,15 +28,15 @@ There is no public firmware for this TV, and unlocking it would cost Netflix HD 
 - sets window, transition and animator animation scales to 0.5×;
 - turns off Google's ambient mode and sets the Launcher's Idle Screen as the screensaver.
 
-**Keeps:** Netflix, YouTube, Stremio, Spotify, Play Services and the Google Services Framework, the Play Store, the remote service, location, the cast receiver, TV Settings and the TV input player are on the Must-Keep List, which always wins. The system updater joins it once its package name on this TV is known. Packages on neither list are reported, never disabled. The background process limit and Play auto-updates are left alone.
+**Keeps:** the Keep List apps, Play Services (which on this TV is also the system updater), the Play Store, the remote, the cast receiver, TV Settings and the TV's HDMI stack are on the Must-Keep List, which always wins; [lists/must-keep.txt](lists/must-keep.txt) has the full list. Packages on neither list are reported, never disabled. The background process limit and Play auto-updates are left alone.
 
-**Known risks** reported on other Google TVs, not yet checked on this one: casting breaking when the setup wizard is disabled, saved Wi-Fi being lost, boot loops on some brands, and Wireless debugging turning off after a reboot. The plan for each is in [the spec](https://github.com/danajerban/fuego-os/issues/1).
+**Known risks** reported on other Google TVs: casting breaking when the setup wizard is disabled, saved Wi-Fi being lost, boot loops on some brands, and Wireless debugging turning off after a reboot. On the owner's Fuego 2K, casting, Wi-Fi and the remote's buttons worked after the Home Takeover, and the HDMI inputs are checked by the owner on the TV ([docs/research/fuego-2k-packages.md](docs/research/fuego-2k-packages.md)). The plan for each risk is in [the spec](https://github.com/danajerban/fuego-os/issues/1).
 
 ## Quick start
 
 You need a Mac and `adb` (`brew install --cask android-platform-tools`).
 
-1. **Download** (or, until a release is published, clone this repository and skip to `script/fuego check`) `fuego-os-vX.Y.Z.tar.gz` and `SHA256SUMS` from the [latest release](https://github.com/danajerban/fuego-os/releases/latest), check the bundle and unpack it:
+1. **Download** `fuego-os-vX.Y.Z.tar.gz` and `SHA256SUMS` from the [latest release](https://github.com/danajerban/fuego-os/releases/latest), check the bundle and unpack it:
 
    ```sh
    cd ~/Downloads
@@ -54,7 +54,7 @@ You need a Mac and `adb` (`brew install --cask android-platform-tools`).
    ```
 
 3. **Look before changing anything**: `script/fuego probe` reports the TV and every package with the lists it is on. Changes nothing.
-4. **Apply**: `script/fuego apply --dry-run` lists what would change; `script/fuego apply` saves the Snapshot, runs Debloat, sets the Speed Settings, installs the Launcher, takes over Home after your yes, sets the Launcher's Idle Screen as the screensaver and asks you to try casting, the HDMI inputs, Wi-Fi and the remote's buttons (`--skip-checks` leaves that for the next run). The Launcher APK comes from the latest release and is installed only if it matches its checksum in that release's `SHA256SUMS`; `--launcher APK` installs a local APK instead; until a release is published, build one with `./gradlew assembleDebug` in `launcher/` (JDK 17 and the Android SDK, see [CONTRIBUTING.md](CONTRIBUTING.md)) and pass `launcher/app/build/outputs/apk/debug/app-debug.apk` here. A local release build comes out unsigned, so Android won't install it. `--pictures FOLDER` copies the JPEG and PNG pictures in a folder on your Mac to the TV as the Launcher's artwork; other files are skipped and listed.
+4. **Apply**: `script/fuego apply --dry-run` lists what would change; `script/fuego apply` saves the Snapshot, sets the Speed Settings, installs the Launcher, takes over Home after your yes, sets the Launcher's Idle Screen as the screensaver, runs Debloat (a Known-Bloat package that is still the TV's screensaver is left on until the next run) and asks you to try casting, the HDMI inputs, Wi-Fi and the remote's buttons (`--skip-checks` leaves that for the next run). The Launcher APK comes from the latest release and is installed only if it matches its checksum in that release's `SHA256SUMS`; `--launcher APK` installs a local APK instead, such as one you built with `./gradlew assembleDebug` in `launcher/` (JDK 17 and the Android SDK, see [CONTRIBUTING.md](CONTRIBUTING.md)): `launcher/app/build/outputs/apk/debug/app-debug.apk`. A local release build comes out unsigned, so Android won't install it. `--pictures FOLDER` copies the JPEG and PNG pictures in a folder on your Mac to the TV as the Launcher's artwork; other files are skipped and listed.
 5. **Undo**: `script/fuego restore` puts the TV back to the Snapshot (see [How to undo](#how-to-undo)).
 
 ## How to undo
