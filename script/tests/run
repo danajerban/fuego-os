@@ -1,0 +1,69 @@
+#!/bin/bash
+# Runs the script's tests against the fake TV. No real TV, emulator or extra tools needed.
+#
+#   script/tests/run                 every test
+#   script/tests/run tv-link         only test files whose name contains "tv-link"
+#
+# A test is a function named test_* in a script/tests/*.test.sh file. Each one runs in its own
+# subshell with a fresh fake TV (see lib.sh) and its own empty HOME, so tests never share state.
+# An adb on PATH that is not the fake TV fails the test: every adb call must go through the
+# script's boundary (FUEGO_ADB).
+
+set -u
+
+TESTS=$(cd "$(dirname "$0")" && pwd)
+REPO=$(cd "$TESTS/../.." && pwd)
+export TESTS REPO
+
+run_root=$(mktemp -d "${TMPDIR:-/tmp}/fuego-tests.XXXXXX") || exit 1
+trap 'rm -rf "$run_root"' EXIT
+
+passed=0
+failed=0
+failures=""
+
+for file in "$TESTS"/*.test.sh; do
+  case "$file" in
+    *"${1-}"*) ;;
+    *) continue ;;
+  esac
+  names=$(
+    # shellcheck source=/dev/null
+    . "$file"
+    declare -F | while read -r _ _ name; do
+      case "$name" in (test_*) echo "$name" ;; esac # "(" keeps bash 3.2 happy inside $( )
+    done
+  )
+  for name in $names; do
+    TEST_DIR="$run_root/$name"
+    mkdir -p "$TEST_DIR"
+    if output=$(
+      exec 2>&1 < /dev/null
+      export TEST_DIR
+      # shellcheck source=script/tests/lib.sh
+      . "$TESTS/lib.sh"
+      test_setup
+      # shellcheck source=/dev/null
+      . "$file"
+      "$name" && test_teardown
+    ); then
+      passed=$((passed + 1))
+      printf 'ok    %s\n' "$name"
+    else
+      failed=$((failed + 1))
+      failures="$failures $name"
+      printf 'FAIL  %s\n' "$name"
+      printf '%s\n' "$output" | sed 's/^/      /'
+    fi
+  done
+done
+
+printf '\n%d passed, %d failed\n' "$passed" "$failed"
+if [ "$failed" -gt 0 ]; then
+  printf 'Failed:%s\n' "$failures"
+  exit 1
+fi
+if [ "$passed" -eq 0 ]; then
+  printf 'No tests matched "%s".\n' "${1-}"
+  exit 1
+fi

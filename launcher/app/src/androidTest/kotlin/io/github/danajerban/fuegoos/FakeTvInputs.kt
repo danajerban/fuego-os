@@ -1,0 +1,101 @@
+package io.github.danajerban.fuegoos
+
+import android.content.Intent
+import android.media.tv.TvContract
+import android.media.tv.TvInputInfo
+import android.media.tv.TvInputManager
+import android.net.Uri
+import android.os.SystemClock
+import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.rules.ExternalResource
+
+/**
+ * The TV's inputs on the emulator, which has none of its own. Its [connect] installs the fake TV
+ * inputs (the fakeapp `tvinputs` flavour): two HDMI ports, a device behind HDMI 1 (as HDMI-CEC
+ * adds) and a tuner. Apps the emulator image ships that play inputs (the x86 image has Live TV,
+ * `com.android.tv`) are disabled, so only [installInputPlayer] puts a player on it. Afterwards the
+ * fake inputs and input player are removed, those apps enabled again and the TV's input settings put back.
+ */
+class FakeTvInputs : ExternalResource() {
+    private val tvInputManager = InstrumentationRegistry.getInstrumentation().targetContext
+        .getSystemService(TvInputManager::class.java)
+    private lateinit var settingsBefore: Map<String, String>
+    private lateinit var imagePlayers: List<String>
+
+    override fun before() {
+        uninstallPackage(PACKAGE)
+        uninstallPackage(INPUT_PLAYER)
+        imagePlayers = inputPlayers()
+        imagePlayers.forEach { Shell.run("pm disable-user --user 0 $it") }
+        settingsBefore = SETTINGS.associateWith { Shell.run("settings get secure $it").trim() }
+        SETTINGS.forEach { Shell.run("settings delete secure $it") }
+    }
+
+    override fun after() {
+        uninstallPackage(PACKAGE)
+        uninstallPackage(INPUT_PLAYER)
+        imagePlayers.forEach { Shell.run("pm enable --user 0 $it") }
+        settingsBefore.forEach { (key, value) ->
+            if (value == "null") Shell.run("settings delete secure $key") else Shell.run("settings put secure $key $value")
+        }
+    }
+
+    /**
+     * Plugs in the fake inputs, and waits until the TV lists the HDMI ports. Installing any app
+     * afterwards makes Android re-read the inputs and turn them back into tuners, so install first.
+     */
+    fun connect() {
+        installFakeApk("fakeapp-tvinputs-release.apk", PACKAGE)
+        // Android lists an app's own TV inputs as tuners; this activity makes them HDMI inputs.
+        waitUntil("the fake inputs are listed") { HDMI_1 in inputTypes() }
+        Shell.run("am start -W -n $PACKAGE/io.github.danajerban.fuegoos.fakeapp.ConnectInputsActivity")
+        waitUntil("the fake HDMI ports are listed") {
+            inputTypes().let { it[HDMI_1] == TvInputInfo.TYPE_HDMI && it[HDMI_2] == TvInputInfo.TYPE_HDMI }
+        }
+    }
+
+    /**
+     * Installs the fake TV input player (the fakeapp `inputplayer` flavour), which shows the input it
+     * was asked to play. The emulator has no TV input player of its own.
+     */
+    fun installInputPlayer() = installFakeApk("fakeapp-inputplayer-release.apk", INPUT_PLAYER)
+
+    /** Names the input [inputId] [name], as the owner does in TV Settings > Inputs. */
+    fun name(inputId: String, name: String) =
+        Shell.run("settings put secure tv_input_custom_labels ${Uri.encode(inputId)},${Uri.encode(name)}")
+
+    /** Hides the input [inputId], as the owner does in TV Settings > Inputs. */
+    fun hide(inputId: String) =
+        Shell.run("settings put secure tv_input_hidden_inputs ${Uri.encode(inputId)}")
+
+    /** The packages whose activities open a passthrough input, as [HdmiInput.switchTo] asks. */
+    private fun inputPlayers(): List<String> =
+        Shell.run(
+            "pm query-activities --brief --user 0 -a ${Intent.ACTION_VIEW} " +
+                "-d ${TvContract.buildChannelUriForPassthroughInput(HDMI_2)} -t ${TvContract.Channels.CONTENT_ITEM_TYPE}",
+        ).lines().map { it.trim() }.filter { ACTIVITY_NAME.matches(it) }.map { it.substringBefore('/') }.distinct()
+
+    private fun inputTypes(): Map<String, Int> =
+        tvInputManager.tvInputList.associate { it.id to it.type }
+
+    private fun waitUntil(what: String, condition: () -> Boolean) {
+        val deadline = SystemClock.uptimeMillis() + 10_000
+        while (!condition()) {
+            check(SystemClock.uptimeMillis() < deadline) { "Timed out waiting until $what" }
+            SystemClock.sleep(200)
+        }
+    }
+
+    companion object {
+        const val PACKAGE = "io.github.danajerban.fuegoos.faketvinputs"
+        const val HDMI_1 = "$PACKAGE/io.github.danajerban.fuegoos.fakeapp.Hdmi1Input"
+        const val HDMI_2 = "$PACKAGE/io.github.danajerban.fuegoos.fakeapp.Hdmi2Input"
+        const val INPUT_PLAYER = "com.google.android.tv.inputplayer"
+
+        /** Where TV Settings keeps the names the owner gave inputs, and the inputs the owner hid. */
+        private val SETTINGS = listOf("tv_input_custom_labels", "tv_input_hidden_inputs")
+
+        /** An activity as `pm query-activities --brief` prints it: `package/class`. */
+        private val ACTIVITY_NAME = Regex("""[\w.]+/[\w.$]+""")
+    }
+}

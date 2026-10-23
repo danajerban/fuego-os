@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Full-screen artwork, faded in once decoded; see Artwork.kt. -->
+    <ImageView
+        android:id="@+id/artwork"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop" />
+
+    <!-- The glass band: the Dock's frosted backing, with the focus highlight floating under the tiles. -->
+    <io.github.danajerban.fuegoos.GlassBand
+        android:id="@+id/dock_band"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|bottom"
+        android:layout_marginBottom="@dimen/dock_margin_bottom"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:padding="@dimen/dock_band_padding">
+
+        <io.github.danajerban.fuegoos.GlassHighlight
+            android:id="@+id/focus_glass"
+            android:layout_width="@dimen/focus_glass_width"
+            android:layout_height="@dimen/focus_glass_height" />
+
+        <LinearLayout
+            android:id="@+id/dock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:orientation="horizontal" />
+    </io.github.danajerban.fuegoos.GlassBand>
+</FrameLayout>
