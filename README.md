@@ -54,7 +54,7 @@ You need a Mac and `adb` (`brew install --cask android-platform-tools`).
    ```
 
 3. **Look before changing anything**: `script/fuego probe` reports the TV and every package with the lists it is on. Changes nothing.
-4. **Apply**: `script/fuego apply --dry-run` lists what would change; `script/fuego apply` saves the Snapshot, runs Debloat, sets the Speed Settings, installs the Launcher and takes over Home after your yes. The Launcher APK comes from the latest release and is installed only if it matches its checksum in that release's `SHA256SUMS`; `--launcher APK` installs a local APK instead.
+4. **Apply**: `script/fuego apply --dry-run` lists what would change; `script/fuego apply` saves the Snapshot, runs Debloat, sets the Speed Settings, installs the Launcher, takes over Home after your yes and sets the Launcher's Idle Screen as the screensaver. The Launcher APK comes from the latest release and is installed only if it matches its checksum in that release's `SHA256SUMS`; `--launcher APK` installs a local APK instead. `--pictures FOLDER` copies the JPEG and PNG pictures in a folder on your Mac to the TV as the Launcher's artwork; other files are skipped and listed.
 5. **Undo**: `script/fuego restore` puts the TV back to the Snapshot (see [How to undo](#how-to-undo)).
 
 ## How to undo

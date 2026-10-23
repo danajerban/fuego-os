@@ -143,9 +143,73 @@ transition_animation_scale=1.0
 window_animation_scale=1.0" "$OUTPUT"
 }
 
-test_fake_tv_uninstall_removes_the_package_and_its_files() {
-  printf 'package=io.github.danajerban.fuegoos\n' > "$TEST_DIR/launcher.apk"
+# The outputs below are copied from an Android TV API 34 emulator, pushing to the Launcher's
+# Artwork Folder.
+
+test_fake_tv_push_into_an_app_folder_fails_until_the_app_has_made_it() {
+  local artwork=/sdcard/Android/data/io.github.danajerban.fuegoos/files/artwork
+  launcher_apk > /dev/null
   adb_fake install "$TEST_DIR/launcher.apk"
+  echo art > "$TEST_DIR/sunrise.jpg"
+  adb_fake shell ls "$artwork"
+  assert_status 1
+  assert_equals "ls: $artwork: No such file or directory" "$OUTPUT"
+  adb_fake push "$TEST_DIR/sunrise.jpg" "$artwork/"
+  assert_status 1
+  assert_equals "$TEST_DIR/sunrise.jpg: 1 file pushed, 0 skipped. 0.1 MB/s (4 bytes in 0.001s)
+adb: error: failed to copy '$TEST_DIR/sunrise.jpg' to '$artwork/': remote secure_mkdirs failed: Operation not permitted" \
+    "$OUTPUT"
+  [ ! -e "$(fake_tv_sdcard_file Android/data/io.github.danajerban.fuegoos)" ] ||
+    fail "adb made the app's folder"
+  adb_fake shell am start -W -n io.github.danajerban.fuegoos/.HomeActivity
+  assert_equals "Starting: Intent { cmp=io.github.danajerban.fuegoos/.HomeActivity }
+Status: ok
+LaunchState: COLD
+Activity: io.github.danajerban.fuegoos/.HomeActivity
+TotalTime: 1432
+WaitTime: 1440
+Complete" "$OUTPUT"
+  adb_fake shell ls "$artwork"
+  assert_status 0
+  assert_equals "" "$OUTPUT"
+  adb_fake push "$TEST_DIR/sunrise.jpg" "$artwork/"
+  assert_status 0
+  assert_equals "$TEST_DIR/sunrise.jpg: 1 file pushed, 0 skipped. 0.1 MB/s (4 bytes in 0.001s)" "$OUTPUT"
+  cmp -s "$TEST_DIR/sunrise.jpg" "$(fake_tv_sdcard_file Android/data/io.github.danajerban.fuegoos/files/artwork/sunrise.jpg)" ||
+    fail "the picture is not on the TV"
+}
+
+test_fake_tv_starting_the_top_activity_again_delivers_to_it() {
+  launcher_apk > /dev/null
+  adb_fake install "$TEST_DIR/launcher.apk"
+  adb_fake shell am start -W -n io.github.danajerban.fuegoos/.HomeActivity
+  adb_fake shell am start -W -n io.github.danajerban.fuegoos/.HomeActivity
+  assert_equals "Starting: Intent { cmp=io.github.danajerban.fuegoos/.HomeActivity }
+Warning: Activity not started, intent has been delivered to currently running top-most instance.
+Status: ok
+LaunchState: UNKNOWN (0)
+Activity: io.github.danajerban.fuegoos/.HomeActivity
+TotalTime: 0
+WaitTime: 19
+Complete" "$OUTPUT"
+}
+
+test_fake_tv_push_sync_skips_a_file_already_on_the_tv() {
+  echo art > "$TEST_DIR/sunrise.jpg"
+  adb_fake push --sync "$TEST_DIR/sunrise.jpg" /sdcard/Pictures/
+  assert_equals "$TEST_DIR/sunrise.jpg: 1 file pushed, 0 skipped. 0.1 MB/s (4 bytes in 0.001s)" "$OUTPUT"
+  adb_fake push --sync "$TEST_DIR/sunrise.jpg" /sdcard/Pictures/
+  assert_status 0
+  assert_equals "$TEST_DIR/sunrise.jpg: 0 files pushed, 1 skipped." "$OUTPUT"
+  echo other art > "$TEST_DIR/sunrise.jpg"
+  adb_fake push --sync "$TEST_DIR/sunrise.jpg" /sdcard/Pictures/
+  assert_equals "$TEST_DIR/sunrise.jpg: 1 file pushed, 0 skipped. 0.1 MB/s (10 bytes in 0.001s)" "$OUTPUT"
+}
+
+test_fake_tv_uninstall_removes_the_package_and_its_files() {
+  launcher_apk > /dev/null
+  adb_fake install "$TEST_DIR/launcher.apk"
+  adb_fake shell am start -W -n io.github.danajerban.fuegoos/.HomeActivity
   echo art > "$TEST_DIR/sunrise.jpg"
   adb_fake push "$TEST_DIR/sunrise.jpg" /sdcard/Android/data/io.github.danajerban.fuegoos/files/artwork/
   assert_status 0
