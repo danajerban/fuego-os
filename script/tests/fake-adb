@@ -129,21 +129,17 @@ package_enabled() {
 }
 
 list_packages() {
-  local only_disabled="" only_enabled="" only_system="" file pkg state kind
+  local only_disabled="" flag file pkg state
   for flag in "$@"; do
     case "$flag" in
       -d) only_disabled=1 ;;
-      -e) only_enabled=1 ;;
-      -s) only_system=1 ;;
       *) unsupported ;;
     esac
   done
   for file in "$tv"/packages/*; do
     pkg=${file##*/}
-    read -r state kind < "$file"
+    read -r state _ < "$file"
     [ -n "$only_disabled" ] && [ "$state" = enabled ] && continue
-    [ -n "$only_enabled" ] && [ "$state" != enabled ] && continue
-    [ -n "$only_system" ] && [ "$kind" != system ] && continue
     echo "package:$pkg"
   done
 }
