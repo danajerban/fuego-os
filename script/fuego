@@ -431,7 +431,7 @@ cmd_probe() {
 # Set by apply --dry-run: every write helper then reports what it would do and writes nothing.
 DRY_RUN=""
 
-# Outcome counts for the summary, kept by outcome.
+# How many of each outcome there were, for the summary.
 DISABLED_COUNT=0
 ALREADY_COUNT=0
 SKIPPED_COUNT=0
