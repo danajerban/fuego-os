@@ -22,7 +22,7 @@ Open an issue first, with the package name, what it does, the `probe` output tha
 
 ## Testing
 
-- **The script** runs against a fake TV, with checks on the fake TV's state and the script's report. Run the tests with `script/tests/run` (plain bash, nothing to install; `script/tests/run probe` runs only the test files whose name contains `probe`), and check every shell file with `shellcheck script/fuego script/tests/* lists/*.sh launcher/*.sh`. Every `adb` call goes through `FUEGO_ADB`, which the tests point at the fake TV (`script/tests/fake-adb`); the script must also run on the Mac's own bash 3.2.
+- **The script** runs against a fake TV, with checks on the fake TV's state and the script's report. Run the tests with `script/tests/run` (plain bash, nothing to install; `script/tests/run probe` runs only the test files whose name contains `probe`), and check every shell file with `shellcheck script/fuego script/tests/* lists/*.sh launcher/*.sh`. Every `adb` call goes through `FUEGO_ADB`, which the tests point at the fake TV (`script/tests/fake-adb`), and every download through `FUEGO_FETCH`, which they point at a fake GitHub (`script/tests/fake-github`), so no test touches the network; the script must also run on the Mac's own bash 3.2.
 - **The package lists** are checked with `lists/check.sh`, and the check itself is tested with `lists/check_test.sh` (see [lists/README.md](lists/README.md)).
 - **The Launcher** runs UI tests on an Android TV (API 34) emulator: Home, D-pad focus, tiles, Inputs, Settings, the Idle Screen.
   With JDK 17 and the Android SDK, from `launcher/`: `./gradlew assembleRelease` builds the shrunk APK and fails if the merged manifest has the INTERNET permission, a receiver or an unlisted service (`./manifest_check_test.sh` proves it on a copy with INTERNET added); `ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest` runs the UI tests on one booted emulator. The tests install tiny fake Dock apps (the `fakeapp` module, one per Dock app's package name) to stand in for the real ones, plus the Fake TV Inputs (HDMI inputs and a TV input player, which the emulator lacks) for the Inputs tests.
@@ -41,4 +41,4 @@ Open an issue first, with the package name, what it does, the `probe` output tha
 
 ## Releases
 
-For maintainers, once there is code: tag a commit `vX.Y.Z` and push the tag. The release will carry the Launcher APK and the script bundle, with notes grouped by label (see `.github/release.yml`).
+For maintainers: set the Launcher's `versionName`, tag the commit `vX.Y.Z` and push the tag. The Release workflow publishes the signed Launcher APK, the script bundle and `SHA256SUMS`, with notes grouped by label (see `.github/release.yml`). A pull request that changes the workflow runs it as a dry run, signed with a throwaway key and published nowhere. The signing secrets and how the key is made and kept are in [docs/releasing.md](docs/releasing.md).
