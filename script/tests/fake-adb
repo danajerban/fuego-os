@@ -17,6 +17,8 @@
 #   home-draw-ms           how long a cold start of Home takes to draw
 #   processes/<package>    a running package's TOTAL PSS in kB (dumpsys meminfo)
 #   sdcard/                files under /sdcard (also reachable as /storage/emulated/0)
+#   app-folders/<package>  the folders an installed app makes under /sdcard/Android/data/<package>/
+#                          when it starts, one per line (from the fake APK's "folder=" lines)
 #   link/                  pairing and connection: pair-address, pairing-code, address,
 #                          paired (present once paired), connected (connected addresses)
 #   faults/                misbehaviour, see fake_tv_fault in lib.sh
@@ -172,8 +174,10 @@ stop_package() {
   case "$(cat "$tv/focus")" in "$1"/*) echo null > "$tv/focus" ;; esac
 }
 
-# The fake APK is a text file: "package=<id>" and any number of "home=<component>" lines.
-# An installed app's Home activities get priority 0: Android ignores priority for them.
+# The fake APK is a text file: "package=<id>", any number of "home=<component>" lines, and any
+# number of "folder=<path>" lines, the folders the app makes under /sdcard/Android/data/<id>/
+# when it starts (as getExternalFilesDir does). An installed app's Home activities get priority 0:
+# Android ignores priority for them.
 install() {
   local apk="" pkg home
   for arg in "$@"; do
@@ -195,6 +199,8 @@ install() {
     sed -n 's/^home=//p' "$apk" | while read -r home; do
       home_candidate "$home" > /dev/null || echo "$home 0" >> "$tv/home-activities"
     done
+    mkdir -p "$tv/app-folders"
+    sed -n 's/^folder=//p' "$apk" > "$tv/app-folders/$pkg"
   fi
   echo "Success"
 }
@@ -204,7 +210,7 @@ uninstall() {
   [ -f "$tv/packages/$pkg" ] || die "Failure [DELETE_FAILED_INTERNAL_ERROR]"
   if ! ignored "$pkg"; then
     stop_package "$pkg"
-    rm -f "$tv/packages/$pkg"
+    rm -f "$tv/packages/$pkg" "$tv/app-folders/$pkg"
     rm -rf "$tv/sdcard/Android/data/$pkg"
     grep -v "^$pkg/" "$tv/home-activities" > "$tv/home-activities.new"
     mv "$tv/home-activities.new" "$tv/home-activities"
@@ -307,10 +313,21 @@ keyevent() {
     KEYCODE_HOME | 3)
       local home
       if ! ignored focus && home=$(resolve_home); then
-        echo "${home#* }" > "$tv/focus"
+        home=${home#* }
+        echo "$home" > "$tv/focus"
+        start_app "${home%%/*}"
       fi
       ;;
   esac
+}
+
+# start_app PACKAGE: the app runs, and makes its folders under /sdcard/Android/data/PACKAGE/.
+start_app() {
+  local folder
+  [ -f "$tv/app-folders/$1" ] || return 0
+  while read -r folder; do
+    mkdir -p "$tv/sdcard/Android/data/$1/$folder"
+  done < "$tv/app-folders/$1"
 }
 
 # As on API 34, the focus lines are in the displays section, not in the window list. The focused
@@ -337,11 +354,18 @@ dumpsys_window() {
   dumpsys_window_windows
 }
 
-# am start -W -S -n COMPONENT: stops the app, starts the activity cold and reports its timing.
-# Only the activities that answer the Home intent exist on the fake TV.
+# am start -W [-S] -n COMPONENT: starts the activity (cold, after stopping the app, with -S) and
+# reports its timing. Started again without -S while it has focus, it gets the intent and no
+# timing. Only the activities that answer the Home intent exist on the fake TV.
 am_start() {
-  [ "$*" = "-W -S -n ${4-}" ] || unsupported
-  local component=$4 pkg=${4%%/*} class=${4#*/} total
+  local component=${!#} stop="" pkg class total
+  case "$*" in
+    "-W -S -n $component") stop=1 ;;
+    "-W -n $component") ;;
+    *) unsupported ;;
+  esac
+  pkg=${component%%/*}
+  class=${component#*/}
   echo "Starting: Intent { cmp=$component }"
   if ! home_candidate "$component" > /dev/null || ! package_enabled "$pkg"; then
     case "$class" in .*) class=$pkg$class ;; esac
@@ -349,7 +373,18 @@ am_start() {
     echo "Error: Activity class {$pkg/$class} does not exist."
     return 0
   fi
+  if [ -z "$stop" ] && [ "$(cat "$tv/focus")" = "$component" ]; then
+    echo "Warning: Activity not started, intent has been delivered to currently running top-most instance."
+    echo "Status: ok"
+    echo "LaunchState: UNKNOWN (0)"
+    echo "Activity: $component"
+    echo "TotalTime: 0"
+    echo "WaitTime: 19"
+    echo "Complete"
+    return 0
+  fi
   echo "$component" > "$tv/focus"
+  start_app "$pkg"
   total=$(cat "$tv/home-draw-ms")
   echo "Status: ok"
   echo "LaunchState: COLD"
@@ -450,21 +485,44 @@ sdcard_path() {
   esac
 }
 
+# adb push [--sync] FILE... REMOTE. adb (the shell user) may make folders anywhere under /sdcard
+# except in an app's own /sdcard/Android/data/<package>/, which only the app makes. --sync skips a
+# file already on the TV as it is.
 push() {
-  local remote target source count=$#
-  remote=${!count}
+  local remote target folder file source sync="" bytes pushed=0 skipped=0 total=0
+  if [ "${1-}" = --sync ]; then
+    sync=1
+    shift
+  fi
+  remote=${!#}
   target=$(sdcard_path "$remote") || exit $?
-  for source in "${@:1:$((count - 1))}"; do
-    [ -e "$source" ] || die "adb: error: cannot stat '$source': No such file or directory"
-    if ignored "$remote"; then
-      :
-    elif [ -d "$target" ] || case "$remote" in */) true ;; *) false ;; esac; then
-      mkdir -p "$target" && cp -R "$source" "$target/"
+  for source in "${@:1:$(($# - 1))}"; do
+    [ -f "$source" ] || die "adb: error: cannot stat '$source': No such file or directory"
+    if [ -d "$target" ] || case "$remote" in */) true ;; *) false ;; esac; then
+      folder=$target
+      file="$target/${source##*/}"
     else
-      mkdir -p "$(dirname "$target")" && cp -R "$source" "$target"
+      folder=$(dirname "$target")
+      file=$target
     fi
-    echo "$source: 1 file pushed, 0 skipped."
+    if [ -n "$sync" ] && cmp -s "$source" "$file"; then
+      echo "$source: 0 files pushed, 1 skipped."
+      skipped=$((skipped + 1))
+      continue
+    fi
+    bytes=$(wc -c < "$source" | tr -d ' ')
+    echo "$source: 1 file pushed, 0 skipped. 0.1 MB/s ($bytes bytes in 0.001s)"
+    case "$folder/" in
+      "$tv/sdcard/Android/data/"*)
+        [ -d "$folder" ] ||
+          die "adb: error: failed to copy '$source' to '$remote': remote secure_mkdirs failed: Operation not permitted"
+        ;;
+    esac
+    ignored "$remote" || { mkdir -p "$folder" && cp "$source" "$file"; }
+    pushed=$((pushed + 1))
+    total=$((total + bytes))
   done
+  [ $(($# - 1)) -eq 1 ] || echo "$pushed files pushed, $skipped skipped. 0.0 MB/s ($total bytes in 0.015s)"
 }
 
 ls_path() {
@@ -476,7 +534,7 @@ ls_path() {
   target=$(sdcard_path "$path") || exit $?
   [ -e "$target" ] || die "ls: $path: No such file or directory"
   if [ -d "$target" ]; then
-    (cd "$target" && for entry in *; do [ -e "$entry" ] && echo "$entry"; done)
+    (cd "$target" && for entry in *; do [ ! -e "$entry" ] || echo "$entry"; done)
   else
     echo "$path"
   fi
