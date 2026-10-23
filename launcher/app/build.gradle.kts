@@ -86,11 +86,12 @@ abstract class CheckLauncherManifest : DefaultTask() {
     }
 }
 
-/** Copies the fake Dock apps' APKs into a folder the UI tests ship as assets. */
+/** Copies the fake apps' release APKs into a folder the UI tests ship as assets. */
 abstract class CollectFakeAppApks : DefaultTask() {
-    @get:InputFiles
-    @get:PathSensitive(PathSensitivity.NAME_ONLY)
-    abstract val apks: ConfigurableFileCollection
+    /** The fake apps' APK folder, read when the task runs: the APKs don't exist while Gradle configures. */
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val apkDir: DirectoryProperty
 
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -101,18 +102,17 @@ abstract class CollectFakeAppApks : DefaultTask() {
     @TaskAction
     fun collect() {
         files.sync {
-            from(apks)
+            from(apkDir) { include("*/release/*.apk") }
+            eachFile { path = name }
+            includeEmptyDirs = false
             into(outputDir)
         }
     }
 }
 
 val fakeAppApks = tasks.register<CollectFakeAppApks>("collectFakeAppApks") {
-    apks.from(
-        project(":fakeapp").layout.buildDirectory.dir("outputs/apk")
-            .map { dir -> dir.asFileTree.matching { include("*/release/*.apk") }.files },
-    )
-    apks.builtBy(":fakeapp:assembleRelease")
+    apkDir.set(project(":fakeapp").layout.buildDirectory.dir("outputs/apk"))
+    dependsOn(":fakeapp:assembleRelease")
 }
 
 androidComponents {

@@ -69,3 +69,5 @@
 **ADB Boundary**: The single point through which the script talks to the TV, which tests point at the Fake TV.
 
 **Fake Dock App**: A tiny test app carrying the package name of one Dock app, installed on the emulator so the Launcher's tests can open it.
+
+**Fake TV Inputs**: Test apps standing in for the TV's HDMI inputs and its TV input player, installed on the emulator (which has neither) so the Launcher's tests can list inputs and open one.

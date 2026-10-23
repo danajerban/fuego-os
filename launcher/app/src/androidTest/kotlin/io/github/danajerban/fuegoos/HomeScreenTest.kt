@@ -32,7 +32,7 @@ class HomeScreenTest {
 
         tv.pressHome()
 
-        assertEquals(listOf("Netflix", "YouTube", "Stremio", "Spotify", "Settings"), tv.dockLabels())
+        assertEquals(listOf("Netflix", "YouTube", "Stremio", "Spotify", "Inputs", "Settings"), tv.dockLabels())
     }
 
     @Test
@@ -41,7 +41,7 @@ class HomeScreenTest {
 
         tv.pressHome()
 
-        assertEquals(listOf("Netflix", "Spotify", "Settings"), tv.dockLabels())
+        assertEquals(listOf("Netflix", "Spotify", "Inputs", "Settings"), tv.dockLabels())
     }
 
     @Test
