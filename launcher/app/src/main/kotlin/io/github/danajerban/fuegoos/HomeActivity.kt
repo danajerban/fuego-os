@@ -23,6 +23,7 @@ class HomeActivity : Activity() {
                 dock.addView(it)
             }
         }
+        DockFocus(dock, findViewById(R.id.focus_glass))
         // Back on Home does nothing: there is nowhere further back to go.
         onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) {}
     }

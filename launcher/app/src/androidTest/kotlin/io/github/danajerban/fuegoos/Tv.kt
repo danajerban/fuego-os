@@ -1,5 +1,7 @@
 package io.github.danajerban.fuegoos
 
+import android.graphics.Rect
+import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
@@ -57,5 +59,20 @@ class Tv {
             device.waitForIdle()
         }
         error("Could not move focus to the $label tile; focus is on ${focusedTile()}")
+    }
+
+    /** Where the tile labelled [label] is drawn on screen, scale included. */
+    fun tileBounds(label: String): Rect =
+        requireNotNull(dock()?.findObject(By.text(label))) { "No $label tile on screen" }.visibleBounds
+
+    /** Where the glass focus highlight is drawn on screen, scale included. */
+    fun focusGlass(): Rect =
+        requireNotNull(device.findObject(By.res(LAUNCHER, "focus_glass"))) { "No glass highlight on screen" }
+            .visibleBounds
+
+    /** Waits out a focus move: its animation must finish within 150 ms, so twice that is plenty. */
+    fun waitForFocusToSettle() {
+        SystemClock.sleep(300)
+        device.waitForIdle()
     }
 }

@@ -3,11 +3,28 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <LinearLayout
-        android:id="@+id/dock"
+    <!-- The glass band: the Dock's frosted backing, with the focus highlight floating under the tiles. -->
+    <FrameLayout
+        android:id="@+id/dock_band"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal|bottom"
         android:layout_marginBottom="@dimen/dock_margin_bottom"
-        android:orientation="horizontal" />
+        android:background="@drawable/dock_band_background"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:padding="@dimen/dock_band_padding">
+
+        <io.github.danajerban.fuegoos.GlassHighlight
+            android:id="@+id/focus_glass"
+            android:layout_width="@dimen/focus_glass_width"
+            android:layout_height="@dimen/focus_glass_height" />
+
+        <LinearLayout
+            android:id="@+id/dock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clipChildren="false"
+            android:orientation="horizontal" />
+    </FrameLayout>
 </FrameLayout>
