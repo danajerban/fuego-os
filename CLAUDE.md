@@ -46,7 +46,7 @@ Export in every shell that builds or tests the Launcher:
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17 PATH=/opt/homebrew/opt/openjdk@17/bin:$PATH ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
 ```
 
-`adb` is `/opt/homebrew/bin/adb`. The SDK has `platforms;android-34`, `build-tools;34.0.0`, `emulator` and `platform-tools`. Build with the committed `launcher/gradlew`. `shellcheck` comes from Homebrew.
+`adb` is `/opt/homebrew/bin/adb`. The SDK has `platforms;android-34`, `build-tools;34.0.0`, `build-tools;36.0.0` (AGP 9.4 needs it for the Launcher), `emulator` and `platform-tools`. Build with the committed `launcher/gradlew`. `shellcheck` comes from Homebrew.
 
 ## Emulator
 
