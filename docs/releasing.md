@@ -3,8 +3,9 @@
 For the owner. A pushed tag `vX.Y.Z` runs [`.github/workflows/release.yml`](../.github/workflows/release.yml), which publishes a GitHub Release with:
 
 - `fuego-os-launcher-vX.Y.Z.apk`: the Launcher, built with R8 and signed with the release key;
+- `fuego-os-launcher-vX.Y.Z.apk.idsig`: apksigner's v4 signature of the APK, for incremental installs; `fuego apply` doesn't need it;
 - `fuego-os-vX.Y.Z.tar.gz`: the script, the package lists beside it, the TV setup steps, the README and the licence;
-- `SHA256SUMS`: the SHA-256 checksum of both.
+- `SHA256SUMS`: the SHA-256 checksum of all three.
 
 `fuego apply` downloads the APK from the latest release and installs it only if it matches its line in `SHA256SUMS`. With the Launcher already on the TV, it installs the release only when the tag's version is higher than the installed `versionName`, so a rerun never reinstalls the same Launcher ([launcher-updates.md](research/launcher-updates.md)). The notes are generated from the merged pull requests, grouped by label as [`.github/release.yml`](../.github/release.yml) says.
 

@@ -1,7 +1,8 @@
 name: Release
 
-# A pushed tag vX.Y.Z publishes a GitHub Release: the signed Launcher APK, the script bundle and
-# SHA256SUMS, with notes grouped by .github/release.yml. `fuego apply` installs the APK from the
+# A pushed tag vX.Y.Z publishes a GitHub Release: the signed Launcher APK, its .apk.idsig (apksigner's
+# v4 signature, for incremental installs; apply doesn't need it), the script bundle and SHA256SUMS
+# of all three, with notes grouped by .github/release.yml. `fuego apply` installs the APK from the
 # latest release and checks it against SHA256SUMS.
 #
 # A pull request that changes this workflow, or a manual run, is a dry run: the same build, signed
