@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="dock_margin_bottom">64dp</dimen>
+    <!-- Room around the tiles for a focused tile's 10% scale-up and the highlight's glow. -->
+    <dimen name="dock_band_padding">20dp</dimen>
+    <dimen name="dock_band_corner">28dp</dimen>
     <dimen name="dock_tile_width">160dp</dimen>
     <dimen name="dock_tile_height">90dp</dimen>
     <dimen name="dock_tile_gap">8dp</dimen>
     <dimen name="dock_tile_corner">12dp</dimen>
     <dimen name="dock_tile_text">20sp</dimen>
+    <!-- The focus highlight is a tile plus its glow on every side. -->
+    <dimen name="focus_glass_glow">6dp</dimen>
+    <dimen name="focus_glass_width">172dp</dimen>
+    <dimen name="focus_glass_height">102dp</dimen>
 </resources>

@@ -3,7 +3,7 @@
     android:layout_width="@dimen/dock_tile_width"
     android:layout_height="@dimen/dock_tile_height"
     android:layout_marginHorizontal="@dimen/dock_tile_gap"
-    android:background="@drawable/dock_tile_background"
+    android:background="@drawable/dock_tile_resting"
     android:focusable="true"
     android:gravity="center"
     android:textColor="@android:color/white"

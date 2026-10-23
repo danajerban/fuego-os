@@ -1,10 +1,14 @@
 package io.github.danajerban.fuegoos
 
+import android.graphics.Bitmap
+import android.graphics.Rect
+import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import kotlin.math.abs
 
 const val LAUNCHER = "io.github.danajerban.fuegoos"
 const val TV_SETTINGS = "com.android.tv.settings"
@@ -57,6 +61,45 @@ class Tv {
             device.waitForIdle()
         }
         error("Could not move focus to the $label tile; focus is on ${focusedTile()}")
+    }
+
+    /** Where the tile labelled [label] is drawn on screen, scale included. */
+    fun tileBounds(label: String): Rect =
+        requireNotNull(dock()?.findObject(By.text(label))) { "No $label tile on screen" }.visibleBounds
+
+    /** Where the glass focus highlight is drawn on screen, scale included. */
+    fun focusGlass(): Rect =
+        requireNotNull(device.findObject(By.res(LAUNCHER, "focus_glass"))) { "No glass highlight on screen" }
+            .visibleBounds
+
+    /** The colour on screen in the artwork above the Dock, as 0xRRGGBB. */
+    fun artworkColour(): Int {
+        val screen = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            .copy(Bitmap.Config.ARGB_8888, false)
+        return screen.getPixel(screen.width / 2, screen.height / 5) and 0xFFFFFF
+    }
+
+    /**
+     * Waits until the artwork shows one of [colours] (by name), and returns its name, or null when none
+     * shows within [timeoutMs].
+     */
+    fun waitForArtwork(colours: Map<String, Int>, timeoutMs: Long = 5_000): String? {
+        val end = SystemClock.uptimeMillis() + timeoutMs
+        while (SystemClock.uptimeMillis() < end) {
+            val seen = artworkColour()
+            colours.entries.firstOrNull { closeColours(it.value, seen) }?.let { return it.key }
+            SystemClock.sleep(100)
+        }
+        return null
+    }
+
+    private fun closeColours(a: Int, b: Int) =
+        listOf(16, 8, 0).all { shift -> abs((a shr shift and 0xFF) - (b shr shift and 0xFF)) <= 24 }
+
+    /** Waits out a focus move: its animation must finish within 150 ms, so twice that is plenty. */
+    fun waitForFocusToSettle() {
+        SystemClock.sleep(300)
+        device.waitForIdle()
     }
 
     /** The Launcher's Inputs screen, or null when it is not on screen. */
