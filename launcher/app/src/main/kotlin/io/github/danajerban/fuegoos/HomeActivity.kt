@@ -11,6 +11,7 @@ import android.window.OnBackInvokedDispatcher
 /** The home screen: what Home opens once the Launcher is the TV's Home app. */
 class HomeActivity : Activity() {
     private lateinit var tileViews: List<TextView>
+    private lateinit var artwork: HomeArtwork
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,8 +25,19 @@ class HomeActivity : Activity() {
             }
         }
         DockFocus(dock, findViewById(R.id.focus_glass))
+        artwork = HomeArtwork(findViewById(R.id.artwork), findViewById(R.id.dock_band))
         // Back on Home does nothing: there is nowhere further back to go.
         onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) {}
+    }
+
+    override fun onStart() {
+        super.onStart()
+        artwork.show()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        artwork.hide()
     }
 
     override fun onResume() {
