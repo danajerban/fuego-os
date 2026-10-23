@@ -14,7 +14,7 @@ import kotlin.math.roundToInt
 
 /**
  * Which artwork to show on one [screen], Home or the Idle Screen: the owner's JPEG and PNG pictures in the
- * Artwork Folder (`getExternalFilesDir("artwork")`) when there are any, else the bundled set. Each call
+ * Artwork Folder (`getExternalFilesDir("artwork")`) when there are any, else the Ember gradient. Each call
  * to [next] moves that screen's place one picture on, in name order, round and round. Home and the Idle
  * Screen each keep their own place, so one never skips the other's pictures; both are kept across
  * restarts.
@@ -30,7 +30,7 @@ class Artwork(context: Context, private val screen: Screen) {
 
     /** Moves on to the next picture and returns it. */
     fun next(): Picture {
-        val (set, pictures) = ownerPictures()?.let { OWNER to it } ?: (BUNDLED to bundledPictures())
+        val (set, pictures) = ownerPictures()?.let { OWNER to it } ?: (EMBER to listOf(StillEmber))
         val setKey = "${screen.key}.$SET"
         val lastKey = "${screen.key}.$LAST"
         val last = place.getString(lastKey, null).takeIf { place.getString(setKey, null) == set }
@@ -61,12 +61,8 @@ class Artwork(context: Context, private val screen: Screen) {
         context.getExternalFilesDir("artwork")
             ?.listFiles { file -> file.isFile && file.extension.lowercase() in OWNER_EXTENSIONS }
             ?.sortedBy { it.name }
-            ?.map { Picture(it.name, ImageDecoder.createSource(it)) }
+            ?.map { OwnerPicture(it.name, ImageDecoder.createSource(it)) }
             ?.takeIf { it.isNotEmpty() }
-
-    private fun bundledPictures(): List<Picture> = BUNDLED_PICTURES.map { (name, id) ->
-        Picture(name, ImageDecoder.createSource(context.resources, id))
-    }
 
     private companion object {
         const val TAG = "Artwork"
@@ -75,29 +71,30 @@ class Artwork(context: Context, private val screen: Screen) {
         const val SET = "set"
         const val LAST = "last"
         const val OWNER = "owner"
-        const val BUNDLED = "bundled"
+        const val EMBER = "ember"
         val OWNER_EXTENSIONS = setOf("jpg", "jpeg", "png")
-
-        /** The bundled artwork, in name order. Made by launcher/make_bundled_artwork.py. */
-        val BUNDLED_PICTURES = listOf(
-            "dusk" to R.drawable.artwork_dusk,
-            "ember" to R.drawable.artwork_ember,
-            "moss" to R.drawable.artwork_moss,
-            "tide" to R.drawable.artwork_tide,
-        )
     }
 }
 
-/** One artwork picture, decoded only when asked for. */
-class Picture(val name: String, private val source: ImageDecoder.Source) {
+/** One artwork picture, made only when asked for. */
+interface Picture {
+    val name: String
+
     /**
      * The picture scaled and centre-cropped to fill [width] by [height], as a hardware bitmap: it lives in
      * graphics memory only, with no second copy on the app's heap.
      */
-    fun fill(width: Int, height: Int): Bitmap = decode(width, height, ImageDecoder.ALLOCATOR_HARDWARE)
+    fun fill(width: Int, height: Int): Bitmap
 
     /** Like [fill], but a small software bitmap whose pixels can be read, for blurring. */
-    fun thumbnail(width: Int, height: Int): Bitmap = decode(width, height, ImageDecoder.ALLOCATOR_SOFTWARE)
+    fun thumbnail(width: Int, height: Int): Bitmap
+}
+
+/** One of the owner's pictures in the Artwork Folder, decoded only when asked for. */
+class OwnerPicture(override val name: String, private val source: ImageDecoder.Source) : Picture {
+    override fun fill(width: Int, height: Int): Bitmap = decode(width, height, ImageDecoder.ALLOCATOR_HARDWARE)
+
+    override fun thumbnail(width: Int, height: Int): Bitmap = decode(width, height, ImageDecoder.ALLOCATOR_SOFTWARE)
 
     private fun decode(width: Int, height: Int, allocator: Int): Bitmap =
         ImageDecoder.decodeBitmap(source) { decoder, info, _ ->

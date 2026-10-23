@@ -1,6 +1,7 @@
 package io.github.danajerban.fuegoos
 
 import android.graphics.Bitmap
+import android.graphics.PointF
 import android.graphics.Rect
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
@@ -12,6 +13,9 @@ import kotlin.math.abs
 
 const val LAUNCHER = "io.github.danajerban.fuegoos"
 const val TV_SETTINGS = "com.android.tv.settings"
+
+/** [colours] (0xRRGGBB) written out for a test's message. */
+fun hex(colours: List<Int>) = colours.joinToString { "%06X".format(it) }
 
 /** The TV as the owner meets it: remote key presses in, what the screen shows out. */
 class Tv {
@@ -73,10 +77,26 @@ class Tv {
             .visibleBounds
 
     /** The colour on screen in the artwork above the Dock, as 0xRRGGBB. */
-    fun artworkColour(): Int {
+    fun artworkColour(): Int = screenColours(listOf(PointF(0.5f, 0.2f))).single()
+
+    /** The colours on screen at [points], given as fractions of the screen's width and height, as 0xRRGGBB. */
+    fun screenColours(points: List<PointF>): List<Int> {
         val screen = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
             .copy(Bitmap.Config.ARGB_8888, false)
-        return screen.getPixel(screen.width / 2, screen.height / 5) and 0xFFFFFF
+        return points.map { screen.getPixel((it.x * screen.width).toInt(), (it.y * screen.height).toInt()) and 0xFFFFFF }
+    }
+
+    /**
+     * Waits until the screen shows [colours] (0xRRGGBB) at [points], each within a small tolerance, and
+     * returns whether it did within [timeoutMs].
+     */
+    fun waitForColours(points: List<PointF>, colours: List<Int>, timeoutMs: Long = 5_000): Boolean {
+        val end = SystemClock.uptimeMillis() + timeoutMs
+        while (SystemClock.uptimeMillis() < end) {
+            if (screenColours(points).zip(colours).all { (seen, colour) -> closeColours(seen, colour) }) return true
+            SystemClock.sleep(100)
+        }
+        return false
     }
 
     /**

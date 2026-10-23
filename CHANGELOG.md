@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - The package lists, checked against the real Fuego 2K: entries `probe` found on the TV are marked confirmed; the Known-Bloat List gains the ACR ad-tracking app, the store demo, Google Feedback, the maker's e-manual, Google's screensaver (the Idle Screen replaces it), the USB media player and the preinstalled streaming apps the owner does not use; the Must-Keep List gains the TV stack HDMI depends on, the remote and Bluetooth pairing, the keyboard, WebView, the shell adb uses and the factory manager. Play Services is confirmed as the system updater. The evidence is in `docs/research/fuego-2k-packages.md`.
+- The Launcher's own artwork is Ember, one gradient drawn in code (dark plum with purple, crimson and orange glows), in place of the four bundled pictures. Home shows it still, behind the frosted Dock; the Idle Screen shows it dimmed and slowly moving, its glows drifting on 40 to 90 second loops so nothing stands still. The owner's pictures in the Artwork Folder still win, with the same per-minute cross-fade on the Idle Screen.
 - `apply` runs Debloat after setting the Idle Screen, and leaves a Known-Bloat package on while the TV's screensaver still points at it (Google's ambient mode when the Idle Screen did not take over), so the screensaver never points at a disabled app; the next `apply` disables it.
 
 ### Fixed

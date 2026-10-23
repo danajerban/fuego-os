@@ -8,6 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class IdleScreenTest {
@@ -37,6 +38,29 @@ class IdleScreenTest {
 
         val seen = tv.waitForArtwork(mapOf("red at half brightness" to HALF_RED, "red at full brightness" to RED))
         assertEquals("red at half brightness", seen)
+    }
+
+    @Test
+    fun withNoOwnerPicturesTheIdleScreenShowsTheEmberGradientAtHalfBrightness() {
+        tv.pressHome()
+
+        screensaver.goIdle()
+
+        val shown = tv.waitForColours(EmberOnScreen.points, EmberOnScreen.dimmedColours)
+        assertTrue("The Idle Screen does not show the dimmed Ember gradient; seen ${hex(tv.screenColours(EmberOnScreen.points))}", shown)
+    }
+
+    @Test
+    fun theIdleScreensGradientMovesAsTimePasses() {
+        tv.pressHome()
+        screensaver.goIdle()
+        check(tv.waitForColours(EmberOnScreen.points, EmberOnScreen.dimmedColours)) { "The Idle Screen does not show the Ember gradient" }
+        val before = tv.screenColours(EmberOnScreen.points)
+
+        clock.advance(20_000)
+
+        assertTrue("The gradient did not move in 20 seconds; still ${hex(before)}", waitForMove(before))
+        assertTrue("The Idle Screen stopped", screensaver.isShowing)
     }
 
     @Test
@@ -115,6 +139,22 @@ class IdleScreenTest {
     }
 
     private fun halfBrightness(colour: Int) = (colour shr 1) and 0x7F7F7F
+
+    /**
+     * Waits until the screen at [EmberOnScreen.points] has moved away from [before] by more than dithering
+     * can explain, and returns whether it did within five seconds.
+     */
+    private fun waitForMove(before: List<Int>): Boolean {
+        val end = SystemClock.uptimeMillis() + 5_000
+        while (SystemClock.uptimeMillis() < end) {
+            val moved = tv.screenColours(EmberOnScreen.points).zip(before).any { (seen, was) ->
+                listOf(16, 8, 0).any { shift -> abs((seen shr shift and 0xFF) - (was shr shift and 0xFF)) >= 6 }
+            }
+            if (moved) return true
+            SystemClock.sleep(100)
+        }
+        return false
+    }
 
     private companion object {
         const val RED = 0xD03020

@@ -56,9 +56,11 @@
 
 **Inputs**: The Dock tile that lists the TV's HDMI inputs by name and switches to the one chosen.
 
-**Artwork**: The full-screen pictures behind the Dock and on the Idle Screen: the owner's pictures when there are any, otherwise the set bundled with the Launcher.
+**Artwork**: The full-screen pictures behind the Dock and on the Idle Screen: the owner's pictures when there are any, otherwise Ember.
 
 **Artwork Folder**: The place in the Launcher's own storage on the TV where the script copies the owner's pictures.
+
+**Ember**: The Launcher's own artwork, a dark plum gradient with purple, crimson and orange glows, drawn in code: still on Home, slowly moving on the Idle Screen.
 
 **Idle Screen**: The Launcher's dimmed artwork, set as the TV's screensaver in place of Google's ambient mode.
 

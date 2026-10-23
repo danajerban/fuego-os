@@ -2,6 +2,24 @@
 
 Each run of `launcher/measure_budgets.sh`, newest first. The budgets: the Dock drawn within 200 ms of Home when warm and 800 ms cold, and at most 40 MB of memory. How to run it is in [CONTRIBUTING.md](../CONTRIBUTING.md) under "Testing".
 
+## 2026-10-23: tv34 emulator, the Ember gradient
+
+- **Device:** the `tv34` AVD as in the run below, started the same way, on the same Mac shared with other work.
+- **Build:** the release build (`assembleRelease`, shrunk) of commit `94a7ce2`, signed with the debug key to install it. The Artwork Folder was empty, so Home showed Ember. Timed as below, leaving Home for YouTube.
+- **Runs:** 9.
+
+| Budget | Median | Worst | Runs | Budget |
+|---|---|---|---|---|
+| Cold Home Draw Time | 298 ms | 378 ms | 373, 364, 362, 266, 298, 283, 281, 265, 378 | 800 ms |
+| Warm Home Draw Time | 100 ms | 191 ms | 105, 110, 91, 191, 100, 70, 69, 107, 62 | 200 ms |
+| Memory (total PSS) on Home | 24 MB | 24 MB | 24 each | 40 MB |
+
+All three are within budget on the emulator.
+
+**Against main under the same load:** main's release build (commit `55c457c`, bundled pictures), measured just before over 5 runs, gave a cold median of 341 ms, a warm median of 95 ms and 23 MB. An earlier version of this change, which rendered Ember on the GPU into a full-size hardware bitmap, gave 390 ms cold and 147 ms warm over 9 runs, because that rendering held up Home's first frame; Ember is now drawn on the CPU at a quarter size instead.
+
+**The gap in the memory number:** as below, graphics memory is not counted. Home's Ember is a hardware bitmap of about 0.5 MB (a quarter of 1920x1080 each way, stretched by the view), against about 8 MB for a 1080p picture, so the estimate on Home without owner pictures is about 25 MB. Owner pictures are still full-size, about 8 MB.
+
 ## 2026-10-23: tv34 emulator (ticket #9)
 
 - **Device:** the `tv34` AVD (Android TV, API 34, `google/sdk_google_atv64_arm64/emu64a:14/UTT1.240131.001.F1/11825476`), 1920x1080, started with `-read-only -no-window -no-audio -no-snapshot` on an Apple silicon Mac shared with other work.

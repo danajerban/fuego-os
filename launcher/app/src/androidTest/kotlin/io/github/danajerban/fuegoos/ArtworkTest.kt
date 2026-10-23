@@ -1,9 +1,8 @@
 package io.github.danajerban.fuegoos
 
-import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -22,18 +21,20 @@ class ArtworkTest {
     private val tv = Tv()
 
     @Test
-    fun homeShowsBundledArtworkThatChangesEachVisit() {
+    fun homeShowsTheEmberGradientWhenTheArtworkFolderIsEmpty() {
         dockApps.installOnly(DockApp.NETFLIX)
 
-        val first = visitHome()
-        val second = visitHome()
-
-        assertNotEquals("Home shows no artwork", 0, first and 0xF0F0F0)
-        assertNotEquals("The artwork did not change on the next Home visit", first, second)
+        repeat(2) { visit ->
+            leaveHome()
+            tv.pressHome()
+            tv.dock()
+            val shown = tv.waitForColours(EmberOnScreen.points, EmberOnScreen.colours)
+            assertTrue("Visit ${visit + 1} does not show the Ember gradient; seen ${hex(tv.screenColours(EmberOnScreen.points))}", shown)
+        }
     }
 
     @Test
-    fun ownerPicturesReplaceTheBundledSetOnePerHomeVisitInNameOrder() {
+    fun ownerPicturesReplaceTheGradientOnePerHomeVisitInNameOrder() {
         dockApps.installOnly(DockApp.NETFLIX)
         tv.pressHome()
         ownerPictures.add("b-green.png", GREEN)
@@ -51,15 +52,6 @@ class ArtworkTest {
         val nameOrder = listOf("red", "green", "blue")
         val start = nameOrder.indexOf(seen.first())
         assertEquals("Pictures not shown one per visit in name order", (0..3).map { nameOrder[(start + it) % 3] }, seen)
-    }
-
-    /** Leaves Home for an app through the Dock, comes back, and returns the artwork's colour once it settles. */
-    private fun visitHome(): Int {
-        leaveHome()
-        tv.pressHome()
-        tv.dock()
-        SystemClock.sleep(1_000)
-        return tv.artworkColour()
     }
 
     private fun leaveHome() {
