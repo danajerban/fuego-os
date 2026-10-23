@@ -56,4 +56,28 @@ class HomeScreenTest {
         assertTrue("Back changed the screen; focus is on ${tv.focusedTile()}", tv.tileKeepsFocus("Spotify"))
         assertEquals(LAUNCHER, tv.foregroundPackage)
     }
+
+    @Test
+    fun settingsTileOpensSettings() {
+        dockApps.installOnly(DockApp.NETFLIX)
+        tv.pressHome()
+        tv.waitForApp(LAUNCHER)
+        tv.focusTile("Settings")
+
+        tv.pressCenter()
+
+        assertTrue("Settings tile opened ${tv.foregroundPackage}", tv.waitForApp(TV_SETTINGS))
+    }
+
+    @Test
+    fun appTileOpensItsApp() {
+        dockApps.installOnly(DockApp.NETFLIX, DockApp.STREMIO)
+        tv.pressHome()
+        tv.waitForApp(LAUNCHER)
+        tv.focusTile("Stremio")
+
+        tv.pressCenter()
+
+        assertTrue("Stremio tile opened ${tv.foregroundPackage}", tv.waitForApp(DockApp.STREMIO.packageName))
+    }
 }
