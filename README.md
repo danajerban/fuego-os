@@ -11,7 +11,7 @@ Makes one Fuego 2K Google TV (Android TV OS 14) fast and free of Bloat, over ADB
 Two pieces:
 
 - **A Mac script** that talks to the TV over ADB:
-  - `probe`: reads facts from the TV (chip, RAM, storage, Android build, package list with the lists each package is on), flags packages on none of the lists, measures available memory and Home Draw Time, and changes nothing.
+  - `probe`: reads facts from the TV (chip, RAM, storage, Android build, package list with the lists each package is on), flags packages on none of the lists, measures available memory and, once the Launcher is Home, Home Draw Time, and changes nothing.
   - `apply`: takes a Snapshot (once, never overwritten), runs Debloat against the reviewed Known-Bloat List, sets the Speed Settings, installs the Launcher, performs the Home Takeover, sets the Idle Screen as the screensaver, then asks you to check casting, HDMI inputs, Wi-Fi and the remote's buttons (the Check Step). It has a dry-run flag and is safe to run again: a rerun updates the Launcher when a newer release is out and redoes the Home Takeover if a TV update undid it.
   - `restore`: puts the TV back to the Snapshot.
 - **A Launcher** of our own: Kotlin with plain Android Views. A glass dock (Netflix, YouTube, Stremio, Spotify, Inputs, Settings) over full-screen artwork, in the style of Home+, and an Idle Screen that replaces Google's ambient mode as the TV's screensaver. No internet permission, and nothing runs while it is off screen except that screensaver.
