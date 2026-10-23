@@ -89,15 +89,31 @@ class Ember(private val width: Int, private val height: Int) {
         /** A screen [length] in pixels, shrunk by [SHRINK] and rounded up. */
         fun shrunk(length: Int) = (length + SHRINK - 1) / SHRINK
 
-        private val TOP_LEFT = Color.parseColor("#14051F")
-        private val BOTTOM_RIGHT = Color.parseColor("#2A0A2E")
+        /**
+         * How bright Ember is against its reference colours below. Every colour in it is a mix of those, so
+         * scaling them all darkens the whole picture evenly and keeps its hues.
+         */
+        private const val BRIGHTNESS = 0.91f
+
+        private val TOP_LEFT = colour("#14051F")
+        private val BOTTOM_RIGHT = colour("#2A0A2E")
 
         /** Drawn in this order, each over the last. Every drift is a smooth loop of 40 to 90 seconds. */
         private val GLOWS = listOf(
-            Glow(Color.parseColor("#6A1FB0"), 0.15f, 0.20f, 0.75f, 0.85f, 0.08f, 71.0, 0.07f, 53.0, 61.0),
-            Glow(Color.parseColor("#C41E4A"), 0.55f, 0.60f, 0.55f, 0.75f, 0.10f, 83.0, 0.08f, 47.0, 67.0),
-            Glow(Color.parseColor("#FF7A1A"), 0.95f, 0.95f, 0.60f, 0.85f, 0.07f, 59.0, 0.09f, 89.0, 43.0),
+            Glow(colour("#6A1FB0"), 0.15f, 0.20f, 0.75f, 0.85f, 0.08f, 71.0, 0.07f, 53.0, 61.0),
+            Glow(colour("#C41E4A"), 0.55f, 0.60f, 0.55f, 0.75f, 0.10f, 83.0, 0.08f, 47.0, 67.0),
+            Glow(colour("#FF7A1A"), 0.95f, 0.95f, 0.60f, 0.85f, 0.07f, 59.0, 0.09f, 89.0, 43.0),
         )
+
+        /** The reference colour [hex] at Ember's [BRIGHTNESS]. */
+        private fun colour(hex: String): Int {
+            val c = Color.parseColor(hex)
+            return Color.rgb(
+                (Color.red(c) * BRIGHTNESS).roundToInt(),
+                (Color.green(c) * BRIGHTNESS).roundToInt(),
+                (Color.blue(c) * BRIGHTNESS).roundToInt(),
+            )
+        }
 
         /** How far, in radii, a glow is drawn: beyond 2.5 radii it adds less than half a colour level. */
         private const val REACH = 2.5f
