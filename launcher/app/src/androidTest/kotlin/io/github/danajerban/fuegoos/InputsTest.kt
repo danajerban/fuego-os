@@ -12,6 +12,9 @@ class InputsTest {
     @get:Rule
     val homeTakeover = HomeTakeover()
 
+    @get:Rule
+    val tvInputs = FakeTvInputs()
+
     private val tv = Tv()
 
     @Test
@@ -31,6 +34,17 @@ class InputsTest {
 
         assertEquals(emptyList<String>(), tv.inputNames())
         assertEquals("No HDMI inputs found", tv.inputsMessage())
+    }
+
+    @Test
+    fun listsTheHdmiPortsByName() {
+        tvInputs.connect()
+
+        openInputs()
+
+        // Not the tuner, and not the device behind HDMI 1: only the ports the owner plugs into.
+        assertEquals(listOf("HDMI 1", "HDMI 2"), tv.inputNames())
+        assertEquals(null, tv.inputsMessage())
     }
 
     private fun openInputs() {
