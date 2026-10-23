@@ -17,9 +17,10 @@ SETUP_DOC="https://github.com/danajerban/fuego-os/blob/main/docs/tv-setup.md"
 # The Launcher's app ID.
 LAUNCHER_PACKAGE=io.github.danajerban.fuegoos
 
-# The Android platform the Launcher builds against. Keep in step with the Launcher's compileSdk.
+# The Android platform the Launcher builds against, and the build tools its Android Gradle Plugin
+# needs. Keep in step with the Launcher's compileSdk and with CI.
 LAUNCHER_SDK_PLATFORM=android-34
-LAUNCHER_BUILD_TOOLS=34.0.0
+LAUNCHER_BUILD_TOOLS=36.0.0
 
 usage() {
   cat <<EOF
@@ -127,7 +128,8 @@ cmd_check() {
 
   if [ -n "$build" ]; then
     sdk=$(sdk_dir)
-    if [ -n "$sdk" ] && [ -d "$sdk/platforms/$LAUNCHER_SDK_PLATFORM" ]; then
+    if [ -n "$sdk" ] && [ -d "$sdk/platforms/$LAUNCHER_SDK_PLATFORM" ] &&
+      [ -d "$sdk/build-tools/$LAUNCHER_BUILD_TOOLS" ]; then
       say "Android SDK: found ($sdk)"
     else
       say "Android SDK: missing (needed only to build the Launcher yourself)"

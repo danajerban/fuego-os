@@ -4,7 +4,7 @@
 
 # A Mac with the Android SDK and a JDK 17 in place, for building the Launcher.
 make_build_tools() {
-  mkdir -p "$TEST_DIR/sdk/platforms/android-34" "$TEST_DIR/jdk/bin"
+  mkdir -p "$TEST_DIR/sdk/platforms/android-34" "$TEST_DIR/sdk/build-tools/36.0.0" "$TEST_DIR/jdk/bin"
   printf '#!/bin/sh\n' > "$TEST_DIR/jdk/bin/java"
   chmod +x "$TEST_DIR/jdk/bin/java"
   export ANDROID_HOME="$TEST_DIR/sdk" JAVA_HOME="$TEST_DIR/jdk"
@@ -73,4 +73,13 @@ test_build_check_names_the_missing_sdk_platform() {
   run_fuego check --build
   assert_status 1
   assert_output_contains 'sdkmanager "platforms;android-34"'
+}
+
+test_build_check_names_the_missing_build_tools() {
+  make_build_tools
+  rm -rf "$TEST_DIR/sdk/build-tools/36.0.0"
+  run_fuego check --build
+  assert_status 1
+  assert_output_contains "Android SDK: missing"
+  assert_output_contains '"build-tools;36.0.0"'
 }
