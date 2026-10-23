@@ -18,7 +18,7 @@ Thanks for helping. fuego-os is at the design stage: there is no code yet. The p
 
 ## Adding a package to the known-Bloat list
 
-Open an issue first, with the package name, what it does, the `probe` output that shows it, and why the TV can run without it. A package that might affect the remote, casting, HDMI inputs, Wi-Fi, Play or system updates stays off the list.
+Open an issue first, with the package name, what it does, the `probe` output that shows it, and why the TV can run without it. A package that might affect the remote, casting, HDMI inputs, Wi-Fi, Play or system updates stays off the list. The list format and the check every change must pass are in [lists/README.md](lists/README.md).
 
 ## Testing (planned)
 

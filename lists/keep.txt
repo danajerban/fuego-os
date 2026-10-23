@@ -1,0 +1,8 @@
+# Keep List: the apps the owner chose to keep. Every entry is also on must-keep.txt.
+# Format: package|confirmed_on_tv|reason  (see lists/README.md)
+# The research notes name these apps but not their package IDs. The IDs are from
+# general knowledge of the Android TV builds: confirm each one with probe.
+com.netflix.ninja|false|Netflix (Android TV app): the owner watches it
+com.google.android.youtube.tv|false|YouTube (official Android TV app): the owner watches it, SmartTube is not used
+com.stremio.one|false|Stremio: the owner watches it
+com.spotify.tv.android|false|Spotify (Android TV app): the owner listens to it
