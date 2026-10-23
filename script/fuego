@@ -31,17 +31,21 @@ Commands:
   probe                    report the TV's chip, RAM, storage, Android build, every package
                            with the lists it is on, and its available memory, Launcher memory
                            and Home draw time. Changes nothing (Home is restarted to time it)
-  apply [--dry-run] [--launcher APK]
+  apply [--dry-run] [--skip-checks] [--launcher APK]
                            save the Snapshot (first run only), disable the Known-Bloat List,
                            set animation scales to 0.5, install the Launcher from APK, make it
-                           what Home opens (after your yes), and measure before and after. Safe
+                           what Home opens (after your yes), ask you to check casting, HDMI
+                           inputs, Wi-Fi and the remote's buttons, and measure before and after.
+                           If casting is broken, the setup wizard alone is turned back on. Safe
                            to run again: it redoes the Home Takeover if a TV update undid it.
                            --dry-run: list what would change and write nothing
+                           --skip-checks: leave the checks for the next apply
   restore                  put package states, animation scales and Home back to the Snapshot,
                            and uninstall the Launcher
 
 The Snapshot is kept on this Mac at $SNAPSHOT
-(set FUEGO_STATE_DIR to keep it elsewhere).
+and your check answers beside it, at $CHECKS
+(set FUEGO_STATE_DIR to keep them elsewhere).
 
 TV setup steps: $SETUP_DOC
 EOF
@@ -896,6 +900,7 @@ apply_home_takeover() {
 
   if [ -n "$DRY_RUN" ]; then
     outcome "would check" "a Home press opens the Launcher"
+    CHECKS_DUE=1
     return 0
   fi
   if home_press_opens_launcher; then
@@ -914,6 +919,9 @@ apply_home_takeover() {
 
 # Set by apply_home_takeover when the Check Step should follow it.
 CHECKS_DUE=""
+
+# Set by apply --skip-checks. A dry run and a run whose input ends (no answers) skip it too.
+SKIP_CHECKS=""
 
 # The owner's answers live on the Mac beside the Snapshot, in a file of their own, so the Snapshot
 # is never rewritten. Each Check Step appends a block of KEY=VALUE lines; the last value of a key
@@ -980,6 +988,14 @@ record_checks() {
 apply_check_step() {
   local name answer answers
   say "Check Step"
+  if [ -n "$DRY_RUN" ]; then
+    outcome "would ask" "the Check Step: casting, HDMI inputs, Wi-Fi, the remote's Netflix and YouTube buttons"
+    return 0
+  fi
+  if [ -n "$SKIP_CHECKS" ]; then
+    outcome "not done" "Check Step: skipped (--skip-checks); the next apply asks again"
+    return 0
+  fi
   say "  Try each of these on the TV now and answer here: yes if it works, no if it doesn't,"
   say "  or Return to skip it."
   answers="checked=$(date '+%Y-%m-%d %H:%M')"
@@ -1000,6 +1016,7 @@ cmd_apply() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --dry-run) DRY_RUN=1 ;;
+      --skip-checks) SKIP_CHECKS=1 ;;
       --launcher)
         [ $# -ge 2 ] || { usage >&2; exit 2; }
         LAUNCHER_APK=$2

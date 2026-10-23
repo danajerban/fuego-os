@@ -36,6 +36,24 @@ check.remote-buttons=works" "$(grep '^check\.' "$(checks_file)")" "recorded answ
   assert_equals disabled-user "$(fake_tv_package_state "$STOCK_LAUNCHER")"
 }
 
+test_check_step_is_skipped_with_skip_checks() {
+  run_fuego_answering "$(takeover_and_checks no no no no)" apply --skip-checks --launcher "$(launcher_apk)"
+  assert_status 0
+  assert_output_contains "checked      a Home press opens the Launcher"
+  assert_output_contains "not done     Check Step: skipped (--skip-checks); the next apply asks again"
+  assert_output_lacks "Casting:"
+  [ ! -e "$(checks_file)" ] || fail "answers recorded from a skipped Check Step"
+  assert_equals disabled-user "$(fake_tv_package_state "$SETUP_WIZARD")"
+}
+
+test_check_step_in_a_dry_run_is_listed_and_asks_nothing() {
+  run_fuego_answering "$(takeover_and_checks no no no no)" apply --dry-run --launcher "$(launcher_apk)"
+  assert_status 0
+  assert_output_contains "would ask    the Check Step: casting, HDMI inputs, Wi-Fi, the remote's Netflix and YouTube buttons"
+  assert_output_lacks "Casting:"
+  assert_equals "" "$(fake_tv_writes)" "writes to the TV"
+}
+
 test_check_step_without_answers_records_nothing_and_the_next_apply_asks_again() {
   run_fuego_answering yes apply --launcher "$(launcher_apk)"
   assert_status 0
