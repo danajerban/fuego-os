@@ -1,0 +1,221 @@
+#!/bin/bash
+# fuego: makes the TV fast and free of Bloat over adb, without root.
+# Runs on the Mac's own bash (3.2). See README.md and docs/tv-setup.md.
+
+set -u
+
+# The one boundary to the TV: every adb call goes through adb_call, which runs $FUEGO_ADB.
+# Tests point FUEGO_ADB at the fake TV (script/tests/fake-adb).
+FUEGO_ADB=${FUEGO_ADB:-adb}
+
+SETUP_DOC="https://github.com/danajerban/fuego-os/blob/main/docs/tv-setup.md"
+
+# The Android platform the Launcher builds against. Keep in step with the Launcher's compileSdk.
+LAUNCHER_SDK_PLATFORM=android-34
+LAUNCHER_BUILD_TOOLS=34.0.0
+
+usage() {
+  cat <<EOF
+Usage: fuego COMMAND
+
+Commands:
+  check [--build]          check the tools this Mac needs (--build: also those for building
+                           the Launcher yourself)
+  pair ADDRESS [CODE]      pair with the TV, using the address and code from the TV's
+                           "Pair device with pairing code" screen
+  connect ADDRESS          connect to the TV, using the "IP address & Port" from the TV's
+                           Wireless debugging screen
+
+TV setup steps: $SETUP_DOC
+EOF
+}
+
+say() {
+  printf '%s\n' "$*"
+}
+
+die() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+adb_call() {
+  "$FUEGO_ADB" "$@"
+}
+
+# --- Tools on the Mac --------------------------------------------------------------------
+
+have_adb() {
+  command -v "$FUEGO_ADB" > /dev/null 2>&1
+}
+
+adb_install_hint() {
+  if [ "$FUEGO_ADB" != adb ]; then
+    say "  FUEGO_ADB is set to $FUEGO_ADB, which isn't there. Fix it, or unset it to use adb from PATH."
+  else
+    say "  Install it with Homebrew: brew install --cask android-platform-tools"
+    say "  or download Android SDK Platform-Tools: https://developer.android.com/tools/releases/platform-tools"
+  fi
+}
+
+require_adb() {
+  have_adb && return 0
+  {
+    say "adb: missing. fuego talks to the TV through adb."
+    adb_install_hint
+  } >&2
+  exit 1
+}
+
+sdk_dir() {
+  printf '%s\n' "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+}
+
+cmd_check() {
+  local build="" missing=0 sdk
+  case "${1-}" in
+    --build) build=1 ;;
+    "") ;;
+    *) usage >&2; exit 2 ;;
+  esac
+
+  if have_adb; then
+    say "adb: found ($(command -v "$FUEGO_ADB"))"
+  else
+    say "adb: missing"
+    adb_install_hint
+    missing=1
+  fi
+
+  if [ -n "$build" ]; then
+    sdk=$(sdk_dir)
+    if [ -n "$sdk" ] && [ -d "$sdk/platforms/$LAUNCHER_SDK_PLATFORM" ]; then
+      say "Android SDK: found ($sdk)"
+    else
+      say "Android SDK: missing (needed only to build the Launcher yourself)"
+      if [ -z "$sdk" ]; then
+        say "  brew install --cask android-commandlinetools"
+        say "  export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools"
+      fi
+      say "  sdkmanager \"platforms;$LAUNCHER_SDK_PLATFORM\" \"build-tools;$LAUNCHER_BUILD_TOOLS\""
+      missing=1
+    fi
+    if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+      say "JDK 17: found ($JAVA_HOME)"
+    else
+      say "JDK 17: missing (needed only to build the Launcher yourself)"
+      say "  brew install openjdk@17"
+      say "  export JAVA_HOME=/opt/homebrew/opt/openjdk@17"
+      missing=1
+    fi
+  fi
+
+  return "$missing"
+}
+
+# --- Pairing and connecting --------------------------------------------------------------
+
+WIRELESS_DEBUGGING="Settings > System > Developer options > Wireless debugging"
+
+# require_address COMMAND ADDRESS: stops unless ADDRESS looks like IP:PORT.
+require_address() {
+  case "$2" in
+    *[!0-9.:]* | :* | *: | *:*:* | "") ;;
+    *:*) return 0 ;;
+  esac
+  say "fuego $1 needs the TV's IP address and port, like 192.168.1.50:41234, as shown on the TV" >&2
+  say "under $WIRELESS_DEBUGGING." >&2
+  exit 2
+}
+
+# Printed whenever the TV can't be reached, so the owner always gets the way back.
+wireless_debugging_help() {
+  say "On the TV, open $WIRELESS_DEBUGGING and turn it on."
+  say "That screen shows the IP address & Port to use with: fuego connect IP:PORT"
+  say "The port changes each time Wireless debugging is turned on."
+  say "Step by step: $SETUP_DOC"
+}
+
+cmd_pair() {
+  local address=${1-} code=${2-} output
+  require_address pair "$address"
+  require_adb
+  if [ -z "$code" ]; then
+    printf 'Pairing code shown on the TV: ' >&2
+    read -r code || true
+    [ -n "$code" ] || die "No pairing code given."
+  fi
+
+  output=$(adb_call pair "$address" "$code" 2>&1)
+  case "$output" in
+    *"Successfully paired"*)
+      say "Paired with the TV at $address."
+      say "Now connect with the IP address & Port shown on the Wireless debugging screen"
+      say "(not the pairing port): fuego connect IP:PORT"
+      ;;
+    *"Wrong password"*)
+      {
+        say "The TV did not accept the pairing code. Each code works once, while the pairing"
+        say "dialog is open. Open \"Pair device with pairing code\" again and use the new code."
+      } >&2
+      exit 1
+      ;;
+    *)
+      {
+        say "Couldn't pair with the TV at $address ($output)."
+        say "Check the address and code on the TV's \"Pair device with pairing code\" dialog,"
+        say "and that the TV and this Mac are on the same network."
+        wireless_debugging_help
+      } >&2
+      exit 1
+      ;;
+  esac
+}
+
+# adb connect reports failures on its output, not always in its exit status.
+cmd_connect() {
+  local address=${1-} output
+  require_address connect "$address"
+  require_adb
+
+  output=$(adb_call connect "$address" 2>&1)
+  case "$output" in
+    "connected to "* | "already connected to "*)
+      say "Connected to the TV at $address."
+      return 0
+      ;;
+  esac
+  {
+    case "$output" in
+      *"Connection refused"*)
+        say "The TV at $address refused the connection."
+        say "A TV restart turns Wireless debugging off, and turning it back on changes the port."
+        ;;
+      *"authenticate"*)
+        say "This Mac isn't paired with the TV at $address. Pair first: fuego pair IP:PORT"
+        say "(the address and code are on the TV's \"Pair device with pairing code\" dialog)."
+        ;;
+      *)
+        say "Can't reach the TV at $address ($output)."
+        say "Check that the TV is on and on the same network as this Mac."
+        ;;
+    esac
+    wireless_debugging_help
+  } >&2
+  exit 1
+}
+
+main() {
+  local command=${1-}
+  [ $# -gt 0 ] && shift
+  case "$command" in
+    check) cmd_check "$@" ;;
+    pair) cmd_pair "$@" ;;
+    connect) cmd_connect "$@" ;;
+    help | -h | --help) usage ;;
+    "") usage >&2; exit 2 ;;
+    *) say "Unknown command: $command" >&2; usage >&2; exit 2 ;;
+  esac
+}
+
+main "$@"
