@@ -446,14 +446,15 @@ FAILED_COUNT=0
 
 # outcome KIND TEXT: one report line, counted for the summary. KIND is one of: disabled,
 # "already off", skipped, changed, installed, uninstalled, unchanged, failed, checked (a check
-# that passed), "not done" (a step left out), or "would ..." in a dry run.
+# that passed), recorded (an owner's answer), "not done" (a step left out), or "would ..." in a
+# dry run.
 outcome() {
   case "$1" in
     disabled | "would disable") DISABLED_COUNT=$((DISABLED_COUNT + 1)) ;;
     "already off") ALREADY_COUNT=$((ALREADY_COUNT + 1)) ;;
     skipped) SKIPPED_COUNT=$((SKIPPED_COUNT + 1)) ;;
     failed) FAILED_COUNT=$((FAILED_COUNT + 1)) ;;
-    unchanged | checked | "not done" | "would ask" | "would check") ;;
+    unchanged | checked | recorded | "not done" | "would ask" | "would check") ;;
     *) CHANGED_COUNT=$((CHANGED_COUNT + 1)) ;;
   esac
   printf '  %-12s %s\n' "$1" "$2"
@@ -862,6 +863,8 @@ apply_home_takeover() {
   on=$(takeover_packages_on)
   if [ "${home%%/*}" = "$LAUNCHER_PACKAGE" ] && [ -z "$on" ]; then
     outcome unchanged "Home opens the Launcher ($home)"
+    # A Check Step that was skipped or never answered is asked now.
+    [ -n "$(checks_value checked)" ] || CHECKS_DUE=1
     return 0
   fi
   [ "$home" = none ] || say "  Home opens $home, not the Launcher."
@@ -904,6 +907,93 @@ apply_home_takeover() {
   fi
   tv_still_reachable
   outcome checked "the TV is still on the network"
+  CHECKS_DUE=1
+}
+
+# --- Check Step and Casting Fallback --------------------------------------------------------
+
+# Set by apply_home_takeover when the Check Step should follow it.
+CHECKS_DUE=""
+
+# The owner's answers live on the Mac beside the Snapshot, in a file of their own, so the Snapshot
+# is never rewritten. Each Check Step appends a block of KEY=VALUE lines; the last value of a key
+# is the current one. Keys:
+#   checked                        when the owner answered the Check Step
+#   check.<name>                   works, broken or skipped, for each name in CHECK_NAMES
+CHECKS="$STATE_DIR/checks"
+
+# checks_value KEY: the last value recorded for KEY; empty when there is none.
+checks_value() {
+  [ -f "$CHECKS" ] || return 0
+  awk -v key="$1=" 'index($0, key) == 1 { value = substr($0, length(key) + 1) } END { print value }' \
+    "$CHECKS"
+}
+
+# The checks, in the order the Check Step asks them.
+CHECK_NAMES="casting hdmi-inputs wifi remote-buttons"
+
+# check_question NAME: what the owner tries on the TV for one check.
+check_question() {
+  case "$1" in
+    casting) say "Casting: cast a video from your phone to the TV. Does it play on the TV?" ;;
+    hdmi-inputs) say "HDMI inputs: open Inputs on the Dock and choose each HDMI input. Does each show its picture?" ;;
+    wifi) say "Wi-Fi: open Settings > Network & Internet on the TV. Is the TV on your Wi-Fi network?" ;;
+    remote-buttons) say "Remote buttons: press the remote's Netflix button, then Home, then its YouTube button. Do both apps open?" ;;
+  esac
+}
+
+# owner_answer: one answer to a check: works (yes), broken (no) or skipped (Return). Asks again
+# after anything else. Fails when the input has ended.
+owner_answer() {
+  local answer
+  while :; do
+    printf '  yes, no, or Return to skip: ' >&2
+    answer=""
+    read -r answer || [ -n "$answer" ] || { [ -t 0 ] || say >&2; return 1; }
+    [ -t 0 ] || say >&2
+    case "$answer" in
+      yes | y) say works; return 0 ;;
+      no | n) say broken; return 0 ;;
+      "") say skipped; return 0 ;;
+    esac
+    say "  Type yes or no, or press Return to skip this check." >&2
+  done
+}
+
+# record_checks LINES: appends KEY=VALUE lines to the answers file, starting it with a header.
+# Prints the outcome; fails when the file can't be written.
+record_checks() {
+  {
+    mkdir -p "$STATE_DIR" &&
+      if [ ! -f "$CHECKS" ]; then
+        say "# fuego-os Check Step: the owner's answers after each Home Takeover, newest last."
+        say "# Kept beside the Snapshot, which is never rewritten."
+      fi >> "$CHECKS" &&
+      printf '%s\n' "$1" >> "$CHECKS"
+  } 2> /dev/null && return 0
+  outcome failed "Check Step: can't record the answers in $CHECKS"
+  return 1
+}
+
+# The Check Step: the owner tries casting, the HDMI inputs, Wi-Fi and the remote's Netflix and
+# YouTube buttons on the TV, one at a time, and the answers are recorded beside the Snapshot.
+apply_check_step() {
+  local name answer answers
+  say "Check Step"
+  say "  Try each of these on the TV now and answer here: yes if it works, no if it doesn't,"
+  say "  or Return to skip it."
+  answers="checked=$(date '+%Y-%m-%d %H:%M')"
+  for name in $CHECK_NAMES; do
+    say "  $(check_question "$name")"
+    if ! answer=$(owner_answer); then
+      outcome "not done" "Check Step: no answers (the input ended); the next apply asks again"
+      return 0
+    fi
+    outcome recorded "$name: $answer"
+    answers="$answers
+check.$name=$answer"
+  done
+  record_checks "$answers" && say "  Answers recorded in $CHECKS"
 }
 
 cmd_apply() {
@@ -943,6 +1033,10 @@ cmd_apply() {
   say
   apply_home_takeover
   say
+  if [ -n "$CHECKS_DUE" ]; then
+    apply_check_step
+    say
+  fi
   print_unlisted "$(unlisted_packages)"
   say
   if [ -n "$DRY_RUN" ]; then
