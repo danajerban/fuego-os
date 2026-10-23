@@ -50,10 +50,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Exported so `fuego probe` can leave Home for it over adb and time Home's redraw. It only
+             lists the TV's inputs: it reads no extras, returns nothing and needs no permission.
+             Started that way (a new task), its own affinity puts it in a task of its own, so Home's
+             task goes behind it and Home stops; opened from the Dock it stays in Home's task. -->
         <activity
             android:name=".InputsActivity"
             android:excludeFromRecents="true"
-            android:exported="false" />
+            android:exported="true"
+            android:taskAffinity="" />
 
         <!-- The Idle Screen, the TV's screensaver; the Launcher's only service. Only the system may bind it. -->
         <service
