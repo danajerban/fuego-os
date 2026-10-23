@@ -4,14 +4,11 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.service.dreams.DreamService
-import android.util.Log
 import android.widget.ImageView
-import java.io.IOException
-import kotlin.concurrent.thread
 
 /**
- * The Idle Screen: the TV's screensaver. It shows the same [Artwork] as Home, dimmed to half brightness,
- * and cross-fades to the next picture every minute. It runs only while the TV is idle; between dreams
+ * The Idle Screen: the TV's screensaver. It shows the same [Artwork] as Home, from its own place in the
+ * pictures, dimmed to half brightness, and cross-fades to the next picture every minute. It runs only while the TV is idle; between dreams
  * the Launcher holds no artwork and runs nothing.
  */
 class IdleScreen : DreamService() {
@@ -32,7 +29,7 @@ class IdleScreen : DreamService() {
         setContentView(R.layout.idle_screen)
         shown = findViewById(R.id.artwork_front)
         incoming = findViewById(R.id.artwork_back)
-        artwork = Artwork(this)
+        artwork = Artwork(this, Artwork.Screen.IDLE_SCREEN)
     }
 
     override fun onDreamingStarted() {
@@ -54,20 +51,15 @@ class IdleScreen : DreamService() {
     private fun showNext() {
         val thisTurn = ++turn
         val screen = windowManager.currentWindowMetrics.bounds
-        thread(name = "artwork") {
-            val picture = artwork.next()
-            val bitmap = try {
-                picture.fill(screen.width(), screen.height())
-            } catch (e: IOException) {
-                Log.w(TAG, "Cannot show the artwork ${picture.name}", e)
-                null
-            }
-            mainThread.post {
-                if (thisTurn != turn) return@post
-                bitmap?.let(::crossFade)
-                nextChange = clock.schedule(CHANGE_MS) { showNext() }
-            }
-        }
+        artwork.showNext(
+            decode = { picture -> picture.fill(screen.width(), screen.height()) },
+            show = { bitmap ->
+                if (thisTurn == turn) {
+                    bitmap?.let(::crossFade)
+                    nextChange = clock.schedule(CHANGE_MS) { showNext() }
+                }
+            },
+        )
     }
 
     private fun crossFade(bitmap: Bitmap) {
@@ -84,7 +76,6 @@ class IdleScreen : DreamService() {
     }
 
     companion object {
-        private const val TAG = "IdleScreen"
         private const val CHANGE_MS = 60_000L
         private const val FADE_MS = 1_000L
 
