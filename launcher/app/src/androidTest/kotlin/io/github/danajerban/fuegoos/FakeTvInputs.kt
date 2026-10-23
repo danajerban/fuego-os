@@ -1,5 +1,7 @@
 package io.github.danajerban.fuegoos
 
+import android.content.Intent
+import android.media.tv.TvContract
 import android.media.tv.TvInputInfo
 import android.media.tv.TvInputManager
 import android.net.Uri
@@ -10,17 +12,21 @@ import org.junit.rules.ExternalResource
 /**
  * The TV's inputs on the emulator, which has none of its own. Its [connect] installs the fake TV
  * inputs (the fakeapp `tvinputs` flavour): two HDMI ports, a device behind HDMI 1 (as HDMI-CEC
- * adds) and a tuner. Afterwards the fake inputs and input player are removed and the TV's input
- * settings put back.
+ * adds) and a tuner. Apps the emulator image ships that play inputs (the x86 image has Live TV,
+ * `com.android.tv`) are disabled, so only [installInputPlayer] puts a player on it. Afterwards the
+ * fake inputs and input player are removed, those apps enabled again and the TV's input settings put back.
  */
 class FakeTvInputs : ExternalResource() {
     private val tvInputManager = InstrumentationRegistry.getInstrumentation().targetContext
         .getSystemService(TvInputManager::class.java)
     private lateinit var settingsBefore: Map<String, String>
+    private lateinit var imagePlayers: List<String>
 
     override fun before() {
         uninstallPackage(PACKAGE)
         uninstallPackage(INPUT_PLAYER)
+        imagePlayers = inputPlayers()
+        imagePlayers.forEach { Shell.run("pm disable-user --user 0 $it") }
         settingsBefore = SETTINGS.associateWith { Shell.run("settings get secure $it").trim() }
         SETTINGS.forEach { Shell.run("settings delete secure $it") }
     }
@@ -28,6 +34,7 @@ class FakeTvInputs : ExternalResource() {
     override fun after() {
         uninstallPackage(PACKAGE)
         uninstallPackage(INPUT_PLAYER)
+        imagePlayers.forEach { Shell.run("pm enable --user 0 $it") }
         settingsBefore.forEach { (key, value) ->
             if (value == "null") Shell.run("settings delete secure $key") else Shell.run("settings put secure $key $value")
         }
@@ -61,6 +68,13 @@ class FakeTvInputs : ExternalResource() {
     fun hide(inputId: String) =
         Shell.run("settings put secure tv_input_hidden_inputs ${Uri.encode(inputId)}")
 
+    /** The packages whose activities open a passthrough input, as [HdmiInput.switchTo] asks. */
+    private fun inputPlayers(): List<String> =
+        Shell.run(
+            "pm query-activities --brief --user 0 -a ${Intent.ACTION_VIEW} " +
+                "-d ${TvContract.buildChannelUriForPassthroughInput(HDMI_2)} -t ${TvContract.Channels.CONTENT_ITEM_TYPE}",
+        ).lines().map { it.trim() }.filter { ACTIVITY_NAME.matches(it) }.map { it.substringBefore('/') }.distinct()
+
     private fun inputTypes(): Map<String, Int> =
         tvInputManager.tvInputList.associate { it.id to it.type }
 
@@ -80,5 +94,8 @@ class FakeTvInputs : ExternalResource() {
 
         /** Where TV Settings keeps the names the owner gave inputs, and the inputs the owner hid. */
         private val SETTINGS = listOf("tv_input_custom_labels", "tv_input_hidden_inputs")
+
+        /** An activity as `pm query-activities --brief` prints it: `package/class`. */
+        private val ACTIVITY_NAME = Regex("""[\w.]+/[\w.$]+""")
     }
 }
