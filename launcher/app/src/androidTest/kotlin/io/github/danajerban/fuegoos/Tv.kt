@@ -75,6 +75,36 @@ class Tv {
     fun dockBand(): Rect =
         requireNotNull(device.findObject(By.res(LAUNCHER, "dock_band"))) { "No Dock band on screen" }.visibleBounds
 
+    /** The clock's time and date as on screen (Home's or the Idle Screen's), or null when no clock shows. */
+    fun clockText(): Pair<String, String>? {
+        val time = device.findObject(By.res(LAUNCHER, "clock_time")) ?: return null
+        val date = device.findObject(By.res(LAUNCHER, "clock_date")) ?: return null
+        return time.text to date.text
+    }
+
+    /** Waits until the clock shows [time] and [date], and returns whether it did within [timeoutMs]. */
+    fun waitForClock(time: String, date: String, timeoutMs: Long = 5_000): Boolean {
+        val end = SystemClock.uptimeMillis() + timeoutMs
+        while (SystemClock.uptimeMillis() < end) {
+            if (clockText() == time to date) return true
+            SystemClock.sleep(100)
+        }
+        return false
+    }
+
+    /** Where the clock's time is on screen. */
+    fun clockTimeBounds(): Rect =
+        requireNotNull(device.findObject(By.res(LAUNCHER, "clock_time"))) { "No clock on screen" }.visibleBounds
+
+    /** The colours on screen (0xRRGGBB) inside [area], every other pixel each way. */
+    fun coloursIn(area: Rect): List<Int> {
+        val screen = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            .copy(Bitmap.Config.ARGB_8888, false)
+        return (area.top until area.bottom step 2).flatMap { y ->
+            (area.left until area.right step 2).map { x -> screen.getPixel(x, y) and 0xFFFFFF }
+        }
+    }
+
     /** The screen's width in pixels. */
     fun screenWidth(): Int = device.displayWidth
 
@@ -83,8 +113,8 @@ class Tv {
         requireNotNull(device.findObject(By.res(LAUNCHER, "focus_glass"))) { "No glass highlight on screen" }
             .visibleBounds
 
-    /** The colour on screen in the artwork above the Dock, as 0xRRGGBB. */
-    fun artworkColour(): Int = screenColours(listOf(PointF(0.5f, 0.2f))).single()
+    /** The colour on screen in the artwork above the Dock and the clock, as 0xRRGGBB. */
+    fun artworkColour(): Int = screenColours(listOf(PointF(0.5f, 0.08f))).single()
 
     /** The colours on screen at [points], given as fractions of the screen's width and height, as 0xRRGGBB. */
     fun screenColours(points: List<PointF>): List<Int> {

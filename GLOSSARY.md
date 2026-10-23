@@ -64,6 +64,8 @@
 
 **Idle Screen**: The Launcher's dimmed artwork, set as the TV's screensaver in place of Google's ambient mode.
 
+**Clock**: The time over a hairline and the date, in the TV's locale and 12/24-hour setting: above the Dock on Home, and larger in the middle of the Idle Screen, where it drifts a few dp each minute against burn-in.
+
 ## Testing
 
 **Fake TV**: A stand-in for the TV in the script's tests. It holds package states, the Home activity, focus and settings, and answers the same `adb` calls a real TV does.

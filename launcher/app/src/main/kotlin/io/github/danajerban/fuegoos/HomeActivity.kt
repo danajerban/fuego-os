@@ -19,6 +19,7 @@ class HomeActivity : Activity() {
     private lateinit var tileViews: List<TextView>
     private lateinit var artwork: HomeArtwork
     private lateinit var iconLoader: ExecutorService
+    private lateinit var clockView: ClockView
 
     /** For each Dock app, the install time of the version whose icon its tile shows. Touched only by [iconLoader]. */
     private val iconVersions = HashMap<String, Long>()
@@ -38,6 +39,7 @@ class HomeActivity : Activity() {
             }
         }
         iconLoader = Executors.newSingleThreadExecutor()
+        clockView = findViewById(R.id.clock)
         DockFocus(dock, findViewById(R.id.focus_glass))
         artwork = HomeArtwork(findViewById(R.id.artwork), findViewById(R.id.dock_band))
         // Back on Home does nothing: there is nowhere further back to go.
@@ -69,6 +71,12 @@ class HomeActivity : Activity() {
         }
         if (tileViews.none { it.isFocused }) tileViews.firstOrNull { it.visibility == View.VISIBLE }?.requestFocus()
         loadAppIcons()
+        clockView.start()
+    }
+
+    override fun onPause() {
+        clockView.stop()
+        super.onPause()
     }
 
     /**

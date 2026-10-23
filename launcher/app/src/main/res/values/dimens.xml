@@ -21,4 +21,15 @@
     <dimen name="focus_glass_glow">6dp</dimen>
     <dimen name="focus_glass_width">140dp</dimen>
     <dimen name="focus_glass_height">102dp</dimen>
+
+    <!-- The clock, as on Home; the Idle Screen shows it larger (IdleScreen.kt). -->
+    <dimen name="clock_time_text">84sp</dimen>
+    <dimen name="clock_date_text">22sp</dimen>
+    <dimen name="clock_hairline">1dp</dimen>
+    <!-- Room around the time and date for their shadow; also the space between them and the hairline. -->
+    <dimen name="clock_text_padding">8dp</dimen>
+    <!-- On Home, the clock sits about the optical centre of the space above the Dock. -->
+    <dimen name="clock_margin_top">76dp</dimen>
+    <!-- How far from its laid-out place the Idle Screen's clock drifts, against burn-in. -->
+    <dimen name="clock_drift">10dp</dimen>
 </resources>

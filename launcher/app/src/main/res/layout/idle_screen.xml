@@ -1,32 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The Idle Screen: the moving Ember gradient and two artwork layers to cross-fade between, under a
-     half-black veil that dims them to half brightness; see IdleScreen.kt. -->
+     half-black veil that dims them to half brightness, and the clock bright over the veil; see IdleScreen.kt. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/idle_screen"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:foreground="@color/idle_screen_veil">
+    android:layout_height="match_parent">
 
-    <io.github.danajerban.fuegoos.EmberView
-        android:id="@+id/ember"
+    <!-- The layers swap order as pictures cross-fade, always under the veil and the clock. -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:alpha="0"
-        android:importantForAccessibility="no" />
+        android:foreground="@color/idle_screen_veil">
 
-    <ImageView
-        android:id="@+id/artwork_back"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:alpha="0"
-        android:importantForAccessibility="no"
-        android:scaleType="centerCrop" />
+        <io.github.danajerban.fuegoos.EmberView
+            android:id="@+id/ember"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0"
+            android:importantForAccessibility="no" />
 
-    <ImageView
-        android:id="@+id/artwork_front"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:alpha="0"
-        android:importantForAccessibility="no"
-        android:scaleType="centerCrop" />
+        <ImageView
+            android:id="@+id/artwork_back"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop" />
+
+        <ImageView
+            android:id="@+id/artwork_front"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop" />
+    </FrameLayout>
+
+    <include
+        layout="@layout/clock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center" />
 </FrameLayout>
