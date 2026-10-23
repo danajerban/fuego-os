@@ -61,6 +61,23 @@ run_fuego_answering() {
   STATUS=$?
 }
 
+# with_list_entry FILE LINE: runs the script from a copy of the repo whose lists/FILE also has
+# LINE, for list mistakes lists/check.sh would refuse (a package on two lists).
+with_list_entry() {
+  if [ "$FUEGO" = "$REPO/script/fuego" ]; then
+    mkdir -p "$TEST_DIR/repo/script"
+    cp "$REPO/script/fuego" "$TEST_DIR/repo/script/fuego"
+    cp -R "$REPO/lists" "$TEST_DIR/repo/lists"
+    FUEGO="$TEST_DIR/repo/script/fuego"
+  fi
+  printf '%s\n' "$2" >> "$TEST_DIR/repo/lists/$1"
+}
+
+# The Snapshot apply keeps on the Mac (HOME is the test's own).
+snapshot_file() {
+  echo "$HOME/Library/Application Support/fuego-os/snapshot"
+}
+
 # --- Assertions ----------------------------------------------------------------------------
 
 assert_status() {
@@ -142,7 +159,7 @@ EOF
 
   fake_tv_setting global window_animation_scale 1.0
   fake_tv_setting global transition_animation_scale 1.0
-  fake_tv_setting global animator_duration_scale 1.0
+  # animator_duration_scale is unset (`settings get` prints null), as on an API 34 emulator.
   fake_tv_setting secure screensaver_enabled 1
   fake_tv_setting secure screensaver_components com.google.android.apps.tv.dreamx/.service.Backdrop
 

@@ -324,9 +324,22 @@ print_packages() {
   done
 
   say
-  say "Unlisted packages ($(count "$unlisted")): on none of the lists. fuego never disables them;"
+  print_unlisted "$unlisted"
+}
+
+# unlisted_packages: the installed packages on none of the lists, one per line.
+unlisted_packages() {
+  local pkg
+  for pkg in $(tv_packages); do
+    [ -z "$(list_names "$pkg")" ] && printf '%s\n' "$pkg"
+  done
+}
+
+# print_unlisted LINES: the report's section on packages that are on none of the lists.
+print_unlisted() {
+  say "Unlisted packages ($(count "$1")): on none of the lists. fuego never disables them;"
   say "review each one for the Known-Bloat List (lists/README.md)."
-  printf '%s' "$unlisted" | sed 's/^/  /'
+  printf '%s\n' "$1" | sed -e '/^$/d' -e 's/^/  /'
 }
 
 # count LINES: the number of non-empty lines.
@@ -384,12 +397,165 @@ cmd_probe() {
   print_measurements
 }
 
+# --- Writes, each read back ----------------------------------------------------------------
+
+# Set by apply --dry-run: every write helper then reports what it would do and writes nothing.
+DRY_RUN=""
+
+# Outcome counts for the summary, kept by outcome.
+DISABLED_COUNT=0
+ALREADY_COUNT=0
+SKIPPED_COUNT=0
+CHANGED_COUNT=0
+FAILED_COUNT=0
+
+# outcome KIND TEXT: one report line, counted for the summary. KIND is one of: disabled,
+# "already off", skipped, changed, unchanged, failed, or "would ..." in a dry run.
+outcome() {
+  case "$1" in
+    disabled | "would disable") DISABLED_COUNT=$((DISABLED_COUNT + 1)) ;;
+    "already off") ALREADY_COUNT=$((ALREADY_COUNT + 1)) ;;
+    skipped) SKIPPED_COUNT=$((SKIPPED_COUNT + 1)) ;;
+    failed) FAILED_COUNT=$((FAILED_COUNT + 1)) ;;
+    unchanged) ;;
+    *) CHANGED_COUNT=$((CHANGED_COUNT + 1)) ;;
+  esac
+  printf '  %-12s %s\n' "$1" "$2"
+}
+
+# package_state PACKAGE: enabled, disabled or missing, as the TV reports it now.
+package_state() {
+  if ! contains "$(tv_packages)" "$1"; then
+    echo missing
+  elif contains "$(tv_packages -d)" "$1"; then
+    echo disabled
+  else
+    echo enabled
+  fi
+}
+
+# set_package_state PACKAGE enabled|disabled: writes the state with pm and reads it back.
+# Prints the outcome; fails when the TV does not report the new state afterwards.
+set_package_state() {
+  local pkg=$1 want=$2 command output error="" now
+  if [ "$want" = disabled ]; then command=disable-user; else command=enable; fi
+  if [ -n "$DRY_RUN" ]; then
+    outcome "would ${command%-user}" "$pkg"
+    return 0
+  fi
+  if [ "$want" = disabled ]; then
+    output=$(adb_call shell pm disable-user --user 0 "$pkg" 2>&1)
+  else
+    output=$(adb_call shell pm enable "$pkg" 2>&1)
+  fi
+  # pm prints "Package PKG new state: ..." on success, and an exception (or "Error: ...") otherwise.
+  case "$output" in
+    *"new state: "*) ;;
+    *) error=$(printf '%s\n' "$output" | grep -m 1 -e 'Exception:' -e '^Error') ;;
+  esac
+  now=$(package_state "$pkg")
+  if [ "$now" = "$want" ]; then
+    outcome "$want" "$pkg"
+  else
+    outcome failed "$pkg (still $now after pm $command${error:+: $error})"
+    return 1
+  fi
+}
+
+# setting NAMESPACE KEY: a setting's value as the TV reports it; "null" when unset.
+setting() {
+  adb_call shell settings get "$1" "$2" | tr -d '\r'
+}
+
+# set_setting NAMESPACE KEY VALUE: writes the setting and reads it back. VALUE "null" deletes it,
+# which is how a setting that was unset is put back. Prints the outcome; fails when the TV does
+# not report VALUE afterwards.
+set_setting() {
+  local ns=$1 key=$2 want=$3 was now command=put
+  was=$(setting "$ns" "$key")
+  if [ "$was" = "$want" ]; then
+    outcome unchanged "$key already $want"
+    return 0
+  fi
+  if [ -n "$DRY_RUN" ]; then
+    outcome "would set" "$key $was -> $want"
+    return 0
+  fi
+  if [ "$want" = null ]; then
+    command=delete
+    adb_call shell settings delete "$ns" "$key" > /dev/null
+  else
+    adb_call shell settings put "$ns" "$key" "$want" > /dev/null
+  fi
+  now=$(setting "$ns" "$key")
+  if [ "$now" = "$want" ]; then
+    outcome changed "$key $was -> $want"
+  else
+    outcome failed "$key (still $now after settings $command)"
+    return 1
+  fi
+}
+
+# --- Apply steps ---------------------------------------------------------------------------
+
+# Debloat: disables the Known-Bloat List, and nothing else. The Must-Keep List wins over it,
+# and the Takeover Packages are left to the Home Takeover.
+apply_debloat() {
+  local pkg
+  say "Debloat"
+  for pkg in $KNOWN_BLOAT_LIST; do
+    if contains "$MUST_KEEP_LIST" "$pkg"; then
+      outcome skipped "$pkg (on the Must-Keep List, which always wins)"
+    elif contains "$TAKEOVER_PACKAGES" "$pkg"; then
+      outcome skipped "$pkg (a Takeover Package: only the Home Takeover disables it)"
+    else
+      case "$(package_state "$pkg")" in
+        missing) outcome skipped "$pkg (not installed)" ;;
+        disabled) outcome "already off" "$pkg" ;;
+        enabled) set_package_state "$pkg" disabled ;;
+      esac
+    fi
+  done
+}
+
+# The window, transition and animator scales (global settings), which apply sets to 0.5.
+# The background process limit and Play auto-updates are never written: Spotify and casting
+# need background processes, and the Keep List apps need updates.
+ANIMATION_SCALES="window_animation_scale transition_animation_scale animator_duration_scale"
+
+apply_speed_settings() {
+  local key
+  say "Speed settings"
+  for key in $ANIMATION_SCALES; do
+    set_setting global "$key" 0.5
+  done
+}
+
+cmd_apply() {
+  case "${1-}" in
+    --dry-run) DRY_RUN=1 ;;
+    "") ;;
+    *) usage >&2; exit 2 ;;
+  esac
+  load_lists
+  require_tv
+  apply_debloat
+  say
+  apply_speed_settings
+  say
+  print_unlisted "$(unlisted_packages)"
+  say
+  say "Summary: $DISABLED_COUNT disabled, $SKIPPED_COUNT skipped, $ALREADY_COUNT already off, $FAILED_COUNT failed"
+  [ "$FAILED_COUNT" -eq 0 ]
+}
+
 main() {
   local command=${1-}
   [ $# -gt 0 ] && shift
   case "$command" in
     check) cmd_check "$@" ;;
     probe) cmd_probe "$@" ;;
+    apply) cmd_apply "$@" ;;
     pair) cmd_pair "$@" ;;
     connect) cmd_connect "$@" ;;
     help | -h | --help) usage ;;
