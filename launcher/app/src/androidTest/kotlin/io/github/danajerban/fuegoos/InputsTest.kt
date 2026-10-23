@@ -3,6 +3,7 @@ package io.github.danajerban.fuegoos
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +44,18 @@ class InputsTest {
         openInputs()
 
         // Not the tuner, and not the device behind HDMI 1: only the ports the owner plugs into.
+        assertEquals(listOf("HDMI 1", "HDMI 2"), tv.inputNames())
+        assertEquals(null, tv.inputsMessage())
+    }
+
+    @Test
+    fun inputsThatComeUpLaterAreListed() {
+        openInputs()
+
+        // A TV's HDMI inputs can register after Home is up, for example right after boot.
+        tvInputs.connect()
+
+        assertTrue("HDMI 2 never showed up; the list has ${tv.inputNames()}", tv.waitForText("HDMI 2"))
         assertEquals(listOf("HDMI 1", "HDMI 2"), tv.inputNames())
         assertEquals(null, tv.inputsMessage())
     }
