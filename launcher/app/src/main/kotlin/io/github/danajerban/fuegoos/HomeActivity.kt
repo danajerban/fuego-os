@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.TextView
 import android.window.OnBackInvokedDispatcher
 import java.util.concurrent.ExecutorService
@@ -20,6 +21,7 @@ class HomeActivity : Activity() {
     private lateinit var artwork: HomeArtwork
     private lateinit var iconLoader: ExecutorService
     private lateinit var clockView: ClockView
+    private var resumed = false
 
     /** For each Dock app, the install time of the version whose icon its tile shows. Touched only by [iconLoader]. */
     private val iconVersions = HashMap<String, Long>()
@@ -71,12 +73,30 @@ class HomeActivity : Activity() {
         }
         if (tileViews.none { it.isFocused }) tileViews.firstOrNull { it.visibility == View.VISIBLE }?.requestFocus()
         loadAppIcons()
-        clockView.start()
+        resumed = true
+        afterNextFrame { if (resumed) clockView.start() }
     }
 
     override fun onPause() {
+        resumed = false
         clockView.stop()
         super.onPause()
+    }
+
+    /**
+     * Runs [action] once Home's next frame is drawn. The clock starts then, so Home's first frame, the
+     * Dock's, never waits for the clock's text and its shadow; the clock follows a frame later.
+     */
+    private fun afterNextFrame(action: () -> Unit) {
+        val view = window.decorView
+        view.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                view.viewTreeObserver.removeOnPreDrawListener(this)
+                view.post { action() }
+                return true
+            }
+        })
+        view.invalidate()
     }
 
     /**
