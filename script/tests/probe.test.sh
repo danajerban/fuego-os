@@ -107,7 +107,8 @@ test_probe_when_wireless_debugging_was_turned_off() {
   assert_output_contains "Settings > System > Developer options > Wireless debugging"
   assert_output_contains "docs/tv-setup.md"
   assert_output_lacks "Packages"
-  assert_equals "read get-state" "$(fake_tv_calls)" "calls to the TV"
+  assert_equals "read devices
+read get-state" "$(fake_tv_calls)" "calls to the TV"
 }
 
 test_probe_when_the_tv_left_the_network() {

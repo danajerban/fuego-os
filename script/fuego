@@ -58,9 +58,11 @@ Commands:
   restore                  put package states, animation scales, the screensaver and Home back
                            to the Snapshot, and uninstall the Launcher
 
-The Snapshot is kept on this Mac at $SNAPSHOT
-and your check answers beside it, at $CHECKS
-(set FUEGO_STATE_DIR to keep them elsewhere).
+The Snapshot is kept on this Mac at $SNAPSHOT,
+your check answers beside it, at $CHECKS,
+and the TV's address from connect at $TV_ADDRESS
+(set FUEGO_STATE_DIR to keep them elsewhere). When adb lists more than one device, fuego talks
+to that address, or to ANDROID_SERIAL when you set it.
 
 TV setup steps: $SETUP_DOC
 EOF
@@ -75,9 +77,17 @@ die() {
   exit 1
 }
 
+# The one device adb talks to, chosen by require_tv. Empty before it (pair, connect), so those
+# adb server commands target no device.
+TV_SERIAL=""
+
 # adb reads whatever waits on its input; it gets none, so the owner's answers stay for the script.
 adb_call() {
-  "$FUEGO_ADB" "$@" < /dev/null
+  if [ -n "$TV_SERIAL" ]; then
+    "$FUEGO_ADB" -s "$TV_SERIAL" "$@" < /dev/null
+  else
+    "$FUEGO_ADB" "$@" < /dev/null
+  fi
 }
 
 # fetch_call URL: downloads URL to standard output, over https only (redirects too). Fails on any
@@ -181,11 +191,41 @@ wireless_debugging_help() {
   say "Step by step: $SETUP_DOC"
 }
 
+# choose_tv: sets TV_SERIAL, the device every later adb call targets. adb's mDNS also lists the
+# TV under a name of its own, so several devices are usual. In order: ANDROID_SERIAL when the
+# owner set it, the address fuego connect saved when adb lists it, the only device listed. Stops
+# when several are listed and none is the saved address; with none listed, TV_SERIAL stays empty.
+choose_tv() {
+  local listed saved
+  if [ -n "${ANDROID_SERIAL-}" ]; then
+    TV_SERIAL=$ANDROID_SERIAL
+    return 0
+  fi
+  # Device lines are "SERIAL<tab>STATE"; anything else adb prints has no tab.
+  listed=$(adb_call devices 2> /dev/null | awk -F '\t' 'NF == 2 { print $1 }')
+  saved=$(cat "$TV_ADDRESS" 2> /dev/null)
+  if [ -n "$saved" ] && contains "$listed" "$saved"; then
+    TV_SERIAL=$saved
+  elif [ "$(printf '%s\n' "$listed" | grep -c .)" -le 1 ]; then
+    TV_SERIAL=$listed
+  else
+    {
+      say "adb lists more than one device, and none is the TV's address from fuego connect:"
+      printf '%s\n' "$listed" | sed 's/^/  /'
+      say "Connect again so fuego knows which one is the TV: fuego connect IP:PORT"
+      say "(or set ANDROID_SERIAL to the TV's name in that list)."
+      wireless_debugging_help
+    } >&2
+    exit 1
+  fi
+}
+
 # require_tv: stops, with the way back, unless adb is there and the TV answers.
 # Every command that talks to a connected TV starts with it.
 require_tv() {
   local output
   require_adb
+  choose_tv
   output=$(adb_call get-state 2>&1)
   [ "$output" = device ] && return 0
   {
@@ -242,6 +282,10 @@ cmd_connect() {
   case "$output" in
     "connected to "* | "already connected to "*)
       say "Connected to the TV at $address."
+      # Saved for the commands after it, which talk to this address when adb lists others too.
+      if ! { mkdir -p "$STATE_DIR" && printf '%s\n' "$address" > "$TV_ADDRESS"; } 2> /dev/null; then
+        say "Couldn't save the TV's address at $TV_ADDRESS." >&2
+      fi
       return 0
       ;;
   esac
@@ -603,6 +647,9 @@ set_setting() {
 # FUEGO_STATE_DIR moves it (tests use their own).
 STATE_DIR=${FUEGO_STATE_DIR:-$HOME/Library/Application Support/fuego-os}
 SNAPSHOT="$STATE_DIR/snapshot"
+
+# The TV's address from the last fuego connect, replaced by each one (unlike the Snapshot).
+TV_ADDRESS="$STATE_DIR/tv-address"
 
 # The screensaver and ambient-mode settings (secure), recorded for the Idle Screen.
 SCREENSAVER_SETTINGS="screensaver_components screensaver_enabled screensaver_activate_on_sleep

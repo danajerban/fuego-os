@@ -37,12 +37,15 @@ Use the **IP address & Port** from the Wireless debugging screen (not the pairin
 script/fuego connect 192.168.1.50:41234
 ```
 
+fuego saves this address on the Mac and talks to it from then on, even when adb also lists the TV under a second name (`adb devices` may show both).
+
 Check that your Mac has what it needs with `script/fuego check`.
 
 ## When the TV can't be reached
 
 - **After a TV restart**, Wireless debugging is usually off. Turn it back on in **Settings > System > Developer options > Wireless debugging**, then run `fuego connect` again with the address shown there: the port changes each time it is turned on. You don't need to pair again.
 - **"Can't reach the TV"** means the Mac can't find it on the network. Check the TV is on, and that the TV and Mac are on the same network.
+- **"adb lists more than one device"** means fuego can't tell which one is the TV. Run `fuego connect` again with the address on the Wireless debugging screen.
 - **"This Mac isn't paired"** means pairing was lost (for example after a factory reset). Pair again (step 3).
 
 ## When you're done
