@@ -58,6 +58,4 @@ class Tv {
         }
         error("Could not move focus to the $label tile; focus is on ${focusedTile()}")
     }
-
-    fun idle() = device.waitForIdle()
 }
