@@ -1,12 +1,12 @@
 # Contributing to fuego-os
 
-Thanks for helping. fuego-os is at the design stage: there is no code yet. The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1), and [GLOSSARY.md](GLOSSARY.md) defines its words (Bloat, Debloat, Snapshot, Restore, Home Takeover, Launcher, Idle Screen). Please use them.
+Thanks for helping. fuego-os is pre-release: the script, the package lists and the Launcher are being built ticket by ticket, and nothing has been tried on the TV yet. The plan is in [the spec](https://github.com/danajerban/fuego-os/issues/1), [GLOSSARY.md](GLOSSARY.md) defines its words (Bloat, Debloat, Snapshot, Restore, Home Takeover, Launcher, Idle Screen), and [docs/adr/](docs/adr/) records the decisions already made and why. Please use the words, and build on the decisions.
 
-## The pieces (planned)
+## The pieces
 
-- **The script:** a shell script on the Mac that drives `adb`. Commands: `probe`, `apply` (with a dry-run flag) and `restore`.
-- **The package lists:** the known-Bloat list and the must-keep list, kept in the repo as data. The must-keep list always wins.
-- **The Launcher:** an Android app in Kotlin with plain Android Views. No Compose, no image-loading or analytics libraries, no INTERNET permission, nothing running while it is off screen except its screensaver (the Idle Screen) while the TV is idle.
+- **The script** (`script/fuego`): a shell script on the Mac that drives `adb`. Commands so far: `check`, `pair`, `connect` and `probe`; `apply` (with a dry-run flag) and `restore` are planned.
+- **The package lists** (`lists/`): the Keep List, Must-Keep List, Known-Bloat List and Takeover Packages, kept in the repo as data. The Must-Keep List always wins.
+- **The Launcher** (`launcher/`): an Android app in Kotlin with plain Android Views. No Compose, no image-loading or analytics libraries, no INTERNET permission, nothing running while it is off screen except its screensaver (the Idle Screen) while the TV is idle.
 
 ## Rules that don't bend
 
@@ -20,9 +20,10 @@ Thanks for helping. fuego-os is at the design stage: there is no code yet. The p
 
 Open an issue first, with the package name, what it does, the `probe` output that shows it, and why the TV can run without it. A package that might affect the remote, casting, HDMI inputs, Wi-Fi, Play or system updates stays off the list. The list format and the check every change must pass are in [lists/README.md](lists/README.md).
 
-## Testing (planned)
+## Testing
 
-- **The script** runs against a fake TV: `probe`, `apply`, `apply` again, then `restore`, with checks on the fake TV's state and the script's report. Run them with `script/tests/run` (plain bash, nothing to install), and check the shell files with `shellcheck script/fuego script/tests/* lists/*.sh launcher/*.sh`. Every `adb` call goes through `FUEGO_ADB`, which the tests point at the fake TV (`script/tests/fake-adb`); the script must also run on the Mac's own bash 3.2.
+- **The script** runs against a fake TV, with checks on the fake TV's state and the script's report. Run the tests with `script/tests/run` (plain bash, nothing to install; `script/tests/run probe` runs only the test files whose name contains `probe`), and check every shell file with `shellcheck script/fuego script/tests/* lists/*.sh launcher/*.sh`. Every `adb` call goes through `FUEGO_ADB`, which the tests point at the fake TV (`script/tests/fake-adb`); the script must also run on the Mac's own bash 3.2.
+- **The package lists** are checked with `lists/check.sh`, and the check itself is tested with `lists/check_test.sh` (see [lists/README.md](lists/README.md)).
 - **The Launcher** runs UI tests on an Android TV (API 34) emulator: Home, D-pad focus, tiles, Inputs, Settings, the Idle Screen.
   With JDK 17 and the Android SDK, from `launcher/`: `./gradlew assembleRelease` builds the shrunk APK and fails if the merged manifest has the INTERNET permission, a receiver or an unlisted service (`./manifest_check_test.sh` proves it on a copy with INTERNET added); `ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest` runs the UI tests on one booted emulator. The tests install tiny fake Dock apps (the `fakeapp` module, one per Dock app's package name) to stand in for the real ones.
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs all of the above on every pull request and every push to `main`: shellcheck, the script tests (on Linux and on macOS's own bash 3.2), the list check, the Launcher build with its manifest checks, and the UI tests on an Android TV API 34 emulator.
