@@ -107,7 +107,7 @@ What the owner checks on the TV (ticket #14): that Home still opens the Launcher
 
 ## Tests and Fake TV changes this needs
 
-Per CLAUDE.md, each new adb call is taught to the Fake TV exactly as a real TV answers it, with a test in `script/tests/fake-tv.test.sh`. Capture the exact outputs from the `tv34` emulator first, on your own port, with two builds of the Fake Dock App or the Launcher: `dumpsys package <pkg>` around `versionName=`, and `adb install -r` of a lower `versionCode` and of a differently signed APK.
+Per AGENTS.md, each new adb call is taught to the Fake TV exactly as a real TV answers it, with a test in `script/tests/fake-tv.test.sh`. Capture the exact outputs from the `tv34` emulator first, on your own port, with two builds of the Fake Dock App or the Launcher: `dumpsys package <pkg>` around `versionName=`, and `adb install -r` of a lower `versionCode` and of a differently signed APK.
 
 - **Fake APK:** add `version=<versionName> <versionCode>` (and maybe `key=<name>` for the signature) to the text format `install()` reads. Document it in the header.
 - **Fake TV state:** `versions/<package>` holding `<versionName> <versionCode>` (and the key). Add it to the state layout in `fake-adb`'s header, and to `fake_tv_new` / a helper in `lib.sh`.
